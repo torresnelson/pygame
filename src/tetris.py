@@ -135,6 +135,8 @@ T = [[\'.....\',
  
 shapes = [S, Z, I, O, J, L, T]
 shape_colors = [(0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 255, 0), (255, 165, 0), (0, 0, 255), (128, 0, 128)]
+black = (0,0,0)
+whithe = (255,255,255)
 # index 0 - 6 represent shape
  
  
@@ -144,10 +146,18 @@ class Piece(object):
         self.y = y 
         self.shape = shape
         self.color = shape_colors[shape.index(shape)]
-
+        self.rotation = 0
  
 def create_grid(locked_positions={}):
-    pass
+    grid = [[(0,0,0) for _ in range(10)] for _ in range(20)]
+
+    for i in range(len(grid)):
+        for j in range(len(grid[i])):
+            if (j, i) in locked_positions:
+                c = locked_positions[(j, i)]
+                grid[i][j] = c
+    return grid
+
  
 def convert_shape_format(shape):
     pass
@@ -159,14 +169,18 @@ def check_lost(positions):
     pass
  
 def get_shape():
-    pass
+    return random.choice(shapes) 
  
  
 def draw_text_middle(text, size, color, surface):
     pass
    
 def draw_grid(surface, row, col):
-    pass
+    surface.fill(black)
+    pygame.font.init
+    font = pygame.font.SysFont('unicode', 60)
+    label = font.render('Tetris', 1, white) 
+    surface.blit()
  
 def clear_rows(grid, locked):
  
