@@ -10,11 +10,6 @@ import random
 # - rotating shape in main
 # - setting up the main
  
-"""
-10 x 20 square grid
-shapes: S, Z, I, O, J, L, T
-represented in order by 0 - 6
-"""
  
 pygame.font.init()
  
@@ -32,11 +27,9 @@ top_left_y = (s_height - play_height) // 2
  
 # SHAPE FORMAT
  
-S = ['.....',
-     '.....',
-     '..0..',
-     '.....',
-     '.....']
+S = ['...',
+     '.0.',
+     '...']
   
 sand = S
 sand_color = (255, 255, 0)
@@ -293,9 +286,6 @@ def main():
             current_piece = next_piece
             next_piece = get_shape()
             change_piece = False
- 
-            # call four times to check for multiple clear rows
-            score +=  clear_rows(grid, locked_positions) * 10
  
         draw_window(win, score)
         # draw_next_shape(next_piece, win)
