@@ -4,17 +4,16 @@ import random
 # GLOBALS VARS
 s_width = 800
 s_height = 600
-
 play_width = 800  
 play_height = 600 
+
+top_left_x = s_width - play_width
+top_left_y = s_height - play_height
 
 block_size = 10
 
 rows = 600 // 10
 columns = 800 // 10
-
-top_left_x = 0
-top_left_y = 0
  
 # SAND piece FORMAT
 piece = ['0']
