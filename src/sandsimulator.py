@@ -1,8 +1,6 @@
 import pygame
 import random
  
-pygame.font.init()
- 
 # GLOBALS VARS
 s_width = 800
 s_height = 600
@@ -13,17 +11,10 @@ rows = 600 // 10
 columns = 800 // 10
  
 top_left_x = (s_width - play_width)
-#top_left_x = (s_width - play_width) // 2 // 2
 top_left_y = (s_height - play_height)
-#top_left_y = (s_height - play_height) // 2 // 3
  
- 
-# SAND FORMAT
-S = ['...',
-     '.0.',
-     '...']
-  
-sand = S
+# SAND GRAIN FORMAT
+sand = ['0']
 
 sand_color = (255, 255, 0)
 black = (0,0,0)
@@ -34,7 +25,7 @@ class Piece(object):
     def __init__(self, column, row):
         self.x = column
         self.y = row
-        self.shape = sand
+        self.grain = sand
         self.color = sand_color
  
 def create_grid(locked_positions={}):
@@ -49,7 +40,7 @@ def create_grid(locked_positions={}):
  
 def convert_sand_format(sand):
     positions = []
-    format = sand.shape
+    format = sand.grain
  
     for i, line in enumerate(format):
         row = list(line)
@@ -58,7 +49,7 @@ def convert_sand_format(sand):
                 positions.append((sand.x + j, sand.y + i))
  
     for i, pos in enumerate(positions):
-        positions[i] = (pos[0] - 4, pos[1] - 2)
+        positions[i] = (pos[0], pos[1])
  
     return positions
  
@@ -66,11 +57,14 @@ def convert_sand_format(sand):
 def valid_space(sand, grid):
     accepted_positions = [[(j, i) for j in range(columns) if grid[i][j] == black] for i in range(rows)]
     accepted_positions = [j for sub in accepted_positions for j in sub]
+    
     formatted = convert_sand_format(sand)
+
     for pos in formatted:
         if pos not in accepted_positions:
             if pos[1] > -1:
                 return False
+    
     return True
  
  
@@ -84,6 +78,8 @@ def check_full(positions):
  
 def get_grain():
     return Piece(columns//2, 0)
+
+pygame.font.init()
  
 def draw_text_middle(text, size, color, surface):
     font = pygame.font.SysFont('comicsans', size, bold=True)
@@ -99,7 +95,6 @@ def draw_grid(surface, row, col):
         pygame.draw.line(surface, (128,128,128), (sx, sy + i*block_size), (sx + play_width, sy + i*block_size))  # horizontal lines
         for j in range(col):
             pygame.draw.line(surface, (128,128,128), (sx + j*block_size, sy), (sx + j*block_size, sy + play_height))  # vertical lines 
-
 
 def draw_window(surface):
     surface.fill(black)
@@ -127,7 +122,6 @@ def main():
  
     while run:
         fall_speed = 1
-
  
         grid = create_grid(locked_positions)
         fall_time += clock.get_rawtime()
@@ -138,7 +132,9 @@ def main():
         if fall_time >= fall_speed:
             fall_time = 0
             current_grain.y += 1
-            if not (valid_space(current_grain, grid)) and current_grain.y > 0:
+            # if (valid_space(current_grain, grid)):
+
+            if not (valid_space(current_grain, grid)) and current_grain.y > 0:                
                 current_grain.y -= 1
                 change_grain = True
  
@@ -160,7 +156,7 @@ def main():
                         current_grain.x -= 1
  
                 if event.key == pygame.K_DOWN:
-                    # move shape down
+                    # move grain down
                     current_grain.y += 1
                     if not valid_space(current_grain, grid):
                         current_grain.y -= 1
@@ -178,12 +174,13 @@ def main():
             x, y = grain_pos[i]
             if y > -1:
                 grid[y][x] = current_grain.color
+
  
-        # IF PIECE HIT GROUND
+        # IF PIECE HIT GROUND or another sand grain
         if change_grain:
             for pos in grain_pos:
                 p = (pos[0], pos[1])
-                locked_positions[p] = current_grain.color
+                locked_positions[p] = red #current_grain.color
             current_grain = next_grain
             next_grain = get_grain()
             change_grain = False
