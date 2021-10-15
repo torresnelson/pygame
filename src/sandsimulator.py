@@ -4,17 +4,20 @@ import random
 # GLOBALS VARS
 s_width = 800
 s_height = 600
-play_width = 800  # meaning 600 // 20 = 20 width per block
-play_height = 600  # meaning 300 // 10 = 30 height per block
+
+play_width = 800  
+play_height = 600 
+
 block_size = 10
+
 rows = 600 // 10
 columns = 800 // 10
+
+top_left_x = 0
+top_left_y = 0
  
-top_left_x = (s_width - play_width)
-top_left_y = (s_height - play_height)
- 
-# SAND GRAIN FORMAT
-sand = ['0']
+# SAND piece FORMAT
+piece = ['0']
 
 sand_color = (255, 255, 0)
 black = (0,0,0)
@@ -25,7 +28,7 @@ class Piece(object):
     def __init__(self, column, row):
         self.x = column
         self.y = row
-        self.grain = sand
+        self.piece = piece
         self.color = sand_color
  
 def create_grid(locked_positions={}):
@@ -40,7 +43,7 @@ def create_grid(locked_positions={}):
  
 def convert_sand_format(sand):
     positions = []
-    format = sand.grain
+    format = sand.piece
  
     for i, line in enumerate(format):
         row = list(line)
@@ -76,17 +79,23 @@ def check_full(positions):
     return False
  
  
-def get_grain():
+def get_piece():
     return Piece(columns//2, 0)
 
 pygame.font.init()
+
+def draw_text_middle_button(text, size, color, surface):
+    font = pygame.font.SysFont('monospace', size, bold=True)
+    label = font.render(text, 1, color)
  
+    surface.blit(label, (top_left_x + play_width/2 - (label.get_width() / 2), top_left_y + (3 * play_height)/4 - label.get_height()))
+
+
 def draw_text_middle(text, size, color, surface):
-    font = pygame.font.SysFont('comicsans', size, bold=True)
+    font = pygame.font.SysFont('monospace', size, bold=True)
     label = font.render(text, 1, color)
  
     surface.blit(label, (top_left_x + play_width/2 - (label.get_width() / 2), top_left_y + play_height/2 - label.get_height()/2))
- 
  
 def draw_grid(surface, row, col):
     sx = top_left_x
@@ -104,7 +113,7 @@ def draw_window(surface):
             pygame.draw.rect(surface, grid[i][j], (top_left_x + j* block_size, top_left_y + i * block_size, block_size, block_size), 0)
  
     # draw grid and border
-    draw_grid(surface, rows, columns)
+    #draw_grid(surface, rows, columns)
     pygame.draw.rect(surface, black, (top_left_x, top_left_y, play_width, play_height), 5) 
  
 def main():
@@ -113,10 +122,10 @@ def main():
     locked_positions = {}  # (x,y):(255,0,0)
     grid = create_grid(locked_positions)
  
-    change_grain = False
+    change_piece = False
     run = True
-    current_grain = get_grain()
-    next_grain = get_grain()
+    current_piece = get_piece()
+    next_piece = get_piece()
     clock = pygame.time.Clock()
     fall_time = 0
  
@@ -128,62 +137,62 @@ def main():
         clock.tick()
  
         # PIECE FALLING CODE 
-        # TODO: add grain's falling logic
+        # TODO: add piece's falling logic
         if fall_time >= fall_speed:
             fall_time = 0
-            current_grain.y += 1
-            # if (valid_space(current_grain, grid)):
-
-            if not (valid_space(current_grain, grid)) and current_grain.y > 0:                
-                current_grain.y -= 1
-                change_grain = True
+            current_piece.y += 1
+            if not (valid_space(current_piece, grid)) and current_piece.y > 0:                
+                current_piece.y -= 1
+                change_piece = True
  
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
                 pygame.display.quit()
                 quit()
- 
+
             if event.type == pygame.KEYDOWN:
+
                 if event.key == pygame.K_LEFT:
-                    current_grain.x -= 1
-                    if not valid_space(current_grain, grid):
-                        current_grain.x += 1
+                    current_piece.x -= 1
+                    if not valid_space(current_piece, grid):
+                        current_piece.x += 1
  
                 elif event.key == pygame.K_RIGHT:
-                    current_grain.x += 1
-                    if not valid_space(current_grain, grid):
-                        current_grain.x -= 1
+                    current_piece.x += 1
+                    if not valid_space(current_piece, grid):
+                        current_piece.x -= 1
  
                 if event.key == pygame.K_DOWN:
-                    # move grain down
-                    current_grain.y += 1
-                    if not valid_space(current_grain, grid):
-                        current_grain.y -= 1
+                    # move piece down
+                    current_piece.y += 1
+                    if not valid_space(current_piece, grid):
+                        current_piece.y -= 1
  
                 if event.key == pygame.K_SPACE:
-                   while valid_space(current_grain, grid):
-                       current_grain.y += 1
-                   current_grain.y -= 1
-                   print(convert_sand_format(current_grain))  # todo fix
- 
-        grain_pos = convert_sand_format(current_grain)
- 
-        # add piece to the grid for drawing
-        for i in range(len(grain_pos)):
-            x, y = grain_pos[i]
-            if y > -1:
-                grid[y][x] = current_grain.color
+                   while valid_space(current_piece, grid):
+                       current_piece.y += 1
+                   current_piece.y -= 1
 
- 
-        # IF PIECE HIT GROUND or another sand grain
-        if change_grain:
-            for pos in grain_pos:
+        piece_pos = convert_sand_format(current_piece)
+        
+        # add piece to the grid for drawing
+        for i in range(len(piece_pos)):
+            x, y = piece_pos[i]
+            if y > -1:
+                grid[y][x] = current_piece.color
+                grid[y-1][x+1] = red
+                grid[y-1][x-1] = red 
+
+        # IF PIECE HIT GROUND or another sand piece???
+        if change_piece:
+            print(convert_sand_format(current_piece))  # todo fix
+            for pos in piece_pos:
                 p = (pos[0], pos[1])
-                locked_positions[p] = red #current_grain.color
-            current_grain = next_grain
-            next_grain = get_grain()
-            change_grain = False
+                locked_positions[p] = red #current_piece.color
+            current_piece = next_piece
+            next_piece = get_piece()
+            change_piece = False
  
         draw_window(win)
 
@@ -200,8 +209,9 @@ def main():
 def main_menu():
     run = True
     while run:
-        win.fill((0,0,0))
-        draw_text_middle('Sand...', 40, (255, 255, 255), win)
+        win.fill(black)
+        draw_text_middle('Press any key to continue.', 30, white, win)
+        draw_text_middle_button('titoreboot inc', 15, red, win)
         pygame.display.update()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
