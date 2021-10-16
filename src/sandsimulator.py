@@ -13,7 +13,9 @@ top_left_x  = s_width - play_width
 top_left_y  = s_height - play_height
 
 # SAND piece FORMAT
-piece = ['0']
+piece = ['...',
+		 '.0.',
+		 '...']
 
 #COLORS  
 red         = (255,0,0)
