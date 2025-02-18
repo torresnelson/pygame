@@ -5,7 +5,17 @@ a tetris clon that you can play B).
 
 ## Installation
 
-For `pip` users:
+I recomend the use of a virtual environment, for this run the
+following command:
+
+    python -m venv .venv
+
+Once created the virtual environment, we need to activate it, run
+this:
+
+    source .venv/bin/activate
+
+Then use the `pip` commande to install the package `pygame`:
 
     pip install pygame
 
