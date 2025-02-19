@@ -1,7 +1,7 @@
-# pygame
+# pygame sandbox
 
 This repo is for pygame experiments and testing, i already made
-a tetris clon that you can play B).
+a tetris, game of life and a sand simulator that you can try B)
 
 ## Installation
 
@@ -27,6 +27,12 @@ In case you're using nixos, use this:
 
 ## How to play tetris clon?
 
-Run this command:
+Run one of the following commands to run a game (need to be in the
+project's root):
 
-    python src/tetris.py
+    python src/tetris/tetris.py
+
+    python src/game_of_life/game_of_life.py
+
+    python src/sand_simulator/sand_simulator.py
+
