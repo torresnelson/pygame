@@ -12,6 +12,7 @@ stdenv.mkDerivation {
     # Python requirements.
     python312Full
     python312Packages.pygame
+
   ];
   src = null;
   shellHook = ''
@@ -26,6 +27,7 @@ stdenv.mkDerivation {
     python -m venv .venv
     source .venv/bin/activate
 
-    pip install pygame
+    pip install pygame square
+
   '';
 }
