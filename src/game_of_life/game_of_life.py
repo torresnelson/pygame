@@ -5,18 +5,19 @@ import copy
 
 pygame.init()
 
-#Colors
+# Colors
+# background = (195, 195, 195)
 background = (0, 0, 0)
-deadCell = (195, 200, 181)
-aliveCell = (0, 27, 9)
+deadCell = (0, 0, 0)
+aliveCell = (195, 195, 195)
 
 #Can change those if you want
 amount = 20
 size = 20
 
-#Some math to calculate size of the screen based on size and amount of 
-cells + space between them
-display_size = ((amount*size) + amount - 1, (amount*size) + amount - 1) 
+# Some math to calculate size of the screen based on size and amount of
+# cells + space between them
+display_size = ((amount*size) + amount - 1, (amount*size) + amount - 1)
 display = pygame.display.set_mode(display_size)
 
 exitGame = False
@@ -46,8 +47,8 @@ def create_grid():
             if cell.alive:
                 pygame.draw.rect(display, aliveCell, [cell.x, cell.y, size, size])
             else:
-            pygame.draw.rect(display, deadCell, [cell.x, cell.y, size, size])
-pygame.display.update()
+                pygame.draw.rect(display, deadCell, [cell.x, cell.y, size, size])
+    pygame.display.update()
 
 def check():
     global grid
