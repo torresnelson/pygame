@@ -27,10 +27,19 @@ block_size = 30
  
 top_left_x = (s_width - play_width) // 2
 top_left_y = s_height - play_height
- 
- 
+
+#COLORS  
+red         = (255, 0, 0)
+green       = (0, 255, 0)
+yellow      = (255, 255, 0)
+orange      = (255, 165, 0)
+blue        = (0, 0, 255)
+light_blue  = (0, 255, 255)
+purple      = (128, 0, 128)
+black       = (0,0,0)
+white       = (255,255,255)
+
 # SHAPE FORMATS
- 
 S = [['.....',
       '.....',
       '..00.',
@@ -132,14 +141,11 @@ T = [['.....',
       '.00..',
       '..0..',
       '.....']]
-  
+
 shapes = [S, Z, I, O, J, L, T]
-shape_colors = [(0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 255, 0), (255, 165, 0), (0, 0, 255), (128, 0, 128)]
-black = (0,0,0)
-whithe = (255,255,255)
+shape_colors = [green, red, light_blue, yellow, orange, blue, purple]
 # index 0 - 6 represent shape
- 
- 
+
 class Piece(object):
     rows = 20  # y
     columns = 10  # x
@@ -150,10 +156,10 @@ class Piece(object):
         self.shape = shape
         self.color = shape_colors[shapes.index(shape)]
         self.rotation = 0  # number from 0-3
- 
+
  
 def create_grid(locked_positions={}):
-    grid = [[(0,0,0) for x in range(10)] for x in range(20)]
+    grid = [[black for x in range(10)] for x in range(20)]
  
     for i in range(len(grid)):
         for j in range(len(grid[i])):
@@ -161,7 +167,7 @@ def create_grid(locked_positions={}):
                 c = locked_positions[(j,i)]
                 grid[i][j] = c
     return grid
- 
+
  
 def convert_shape_format(shape):
     positions = []
@@ -245,6 +251,7 @@ def clear_rows(grid, locked):
                 locked[newKey] = locked.pop(key)
     return inc 
  
+
 def draw_next_shape(shape, surface):
     font = pygame.font.SysFont('comicsans', 30)
     label = font.render('Next Shape', 1, (255,255,255))
@@ -270,6 +277,7 @@ def update_score(nscore):
             f.write(str(score))
         else:
             f.write(str(nscore))
+
 
 def max_score():
     with open('scores.txt', 'r') as f:
