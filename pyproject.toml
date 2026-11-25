@@ -17,8 +17,6 @@ pythonpath = ['src/tetris', 'src/game_of_life', 'src/sand_simulator']
 line-length = 100
 # Legacy scripts not yet cleaned up; drop entries as they get refactored.
 extend-exclude = [
-    'src/game_of_life/game_of_life.py',
-    'src/game_of_life/square.py',
     'src/sand_simulator/sand_simulator.py',
 ]
 
