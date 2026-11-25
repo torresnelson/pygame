@@ -38,8 +38,17 @@ project's root or anywhere else):
 
     python src/sand_simulator/sand_simulator.py
 
-Tetris stores the best score in `src/tetris/scores.txt` (ignored
-by git, created on first game over).
+Controls:
+
+- tetris: arrows move/rotate, space hard drops. The best score is
+  stored in `src/tetris/scores.txt` (ignored by git, created on
+  first game over).
+- game of life: click cells to toggle them, space runs/pauses.
+- sand simulator: hold the left mouse button to pour sand, `c`
+  clears, `esc` goes back to the menu.
+
+Game rules live in pygame-free modules (`tetris_logic.py`,
+`life.py`, `sand.py`) covered by the tests in `tests/`.
 
 ## Development
 

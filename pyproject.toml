@@ -15,10 +15,6 @@ pythonpath = ['src/tetris', 'src/game_of_life', 'src/sand_simulator']
 
 [tool.ruff]
 line-length = 100
-# Legacy scripts not yet cleaned up; drop entries as they get refactored.
-extend-exclude = [
-    'src/sand_simulator/sand_simulator.py',
-]
 
 [tool.ruff.lint]
 select = ['E', 'F', 'I', 'Q', 'UP', 'B']
