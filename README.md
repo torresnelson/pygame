@@ -44,11 +44,15 @@ Controls:
   stored in `src/tetris/scores.txt` (ignored by git, created on
   first game over).
 - game of life: click cells to toggle them, space runs/pauses.
-- sand simulator: hold the left mouse button to pour sand, `c`
-  clears, `esc` goes back to the menu.
+- sand simulator: left mouse paints, right mouse erases, `1` sand,
+  `2` water, `3` stone, mouse wheel or `[` `]` brush size, `space`
+  pause, `c` clear, `esc` back to the menu. Sand accelerates under
+  gravity, piles into slopes and sinks through water; water flows
+  and levels out; stone stays put.
 
 Game rules live in pygame-free modules (`tetris_logic.py`,
-`life.py`, `sand.py`) covered by the tests in `tests/`.
+`life.py`, and the sand engine `world.py` + `materials.py`)
+covered by the tests in `tests/`.
 
 ## Development
 

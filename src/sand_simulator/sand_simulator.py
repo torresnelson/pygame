@@ -1,23 +1,43 @@
-'''Hold the left mouse button to pour sand, press C to clear, Esc for the menu.'''
+'''Falling-sand sandbox.
+
+Left mouse paints the selected material, right mouse erases.
+1 sand, 2 water, 3 stone, mouse wheel or [ ] brush size,
+space pause, c clear, esc back to the menu.
+'''
 
 import sys
 from functools import cache
 
 import pygame
-from sand import Pos, pour, step
+from materials import Material, palette
+from world import World
 
 S_WIDTH = 800
 S_HEIGHT = 600
-BLOCK_SIZE = 10
-COLUMNS = S_WIDTH // BLOCK_SIZE
-ROWS = S_HEIGHT // BLOCK_SIZE
-BRUSH_RADIUS = 1
+CELL_SIZE = 5
+COLUMNS = S_WIDTH // CELL_SIZE
+ROWS = S_HEIGHT // CELL_SIZE
 FPS = 60
+
+MIN_BRUSH, MAX_BRUSH = 0, 12
+# Granular materials are poured sparsely so they look like grains.
+FILL = {Material.SAND: 0.5, Material.WATER: 0.6, Material.STONE: 1.0}
+KEY_MATERIALS = {
+    pygame.K_1: Material.SAND,
+    pygame.K_2: Material.WATER,
+    pygame.K_3: Material.STONE,
+}
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
-SAND = (230, 200, 90)
+BACKGROUND = (12, 12, 18)
+
+# Pre-rendered RGB bytes per (material, shade); empty cells use BACKGROUND.
+PIXELS: list[list[bytes]] = [
+    [bytes(BACKGROUND if m == Material.EMPTY else color) for color in shades]
+    for m, shades in sorted(palette().items())
+]
 
 
 @cache
@@ -30,14 +50,18 @@ def draw_text(surface: pygame.Surface, text: str, size: int, color: tuple, y: fl
     surface.blit(label, (S_WIDTH / 2 - label.get_width() / 2, y - label.get_height() / 2))
 
 
-def to_cell(pixel: tuple[int, int]) -> Pos:
-    return pixel[0] // BLOCK_SIZE, pixel[1] // BLOCK_SIZE
+def to_cell(pixel: tuple[int, int]) -> tuple[int, int]:
+    return pixel[0] // CELL_SIZE, pixel[1] // CELL_SIZE
 
 
-def draw(surface: pygame.Surface, grains: set[Pos]) -> None:
-    surface.fill(BLACK)
-    for x, y in grains:
-        pygame.draw.rect(surface, SAND, (x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+def render(world: World) -> bytes:
+    return b''.join(PIXELS[m][s] for m, s in zip(world.material, world.shade, strict=True))
+
+
+def draw(win: pygame.Surface, world: World, status: str) -> None:
+    frame = pygame.image.frombuffer(render(world), (world.width, world.height), 'RGB')
+    win.blit(pygame.transform.scale(frame, (S_WIDTH, S_HEIGHT)), (0, 0))
+    win.blit(get_font(14).render(status, True, WHITE), (8, 6))
     pygame.display.update()
 
 
@@ -48,30 +72,52 @@ def quit_game() -> None:
 
 def main(win: pygame.Surface) -> None:
     clock = pygame.time.Clock()
-    grains: set[Pos] = set()
-    pouring = False
-    cursor: Pos = (COLUMNS // 2, 0)
+    world = World(COLUMNS, ROWS)
+    selected = Material.SAND
+    brush = 3
+    paused = False
+    buttons = {1: False, 3: False}
+    cursor = (COLUMNS // 2, 0)
 
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 quit_game()
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                pouring, cursor = True, to_cell(event.pos)
-            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-                pouring = False
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button in buttons:
+                buttons[event.button] = True
+                cursor = to_cell(event.pos)
+            elif event.type == pygame.MOUSEBUTTONUP and event.button in buttons:
+                buttons[event.button] = False
             elif event.type == pygame.MOUSEMOTION:
                 cursor = to_cell(event.pos)
+            elif event.type == pygame.MOUSEWHEEL:
+                brush = max(MIN_BRUSH, min(MAX_BRUSH, brush + event.y))
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_c:
-                    grains = set()
+                if event.key in KEY_MATERIALS:
+                    selected = KEY_MATERIALS[event.key]
+                elif event.key == pygame.K_LEFTBRACKET:
+                    brush = max(MIN_BRUSH, brush - 1)
+                elif event.key == pygame.K_RIGHTBRACKET:
+                    brush = min(MAX_BRUSH, brush + 1)
+                elif event.key == pygame.K_SPACE:
+                    paused = not paused
+                elif event.key == pygame.K_c:
+                    world.clear()
                 elif event.key == pygame.K_ESCAPE:
                     return
 
-        if pouring:
-            grains = pour(grains, cursor, BRUSH_RADIUS, COLUMNS, ROWS)
-        grains = step(grains, COLUMNS, ROWS)
-        draw(win, grains)
+        if buttons[1]:
+            world.paint(*cursor, brush, selected, FILL[selected])
+        if buttons[3]:
+            world.paint(*cursor, brush, Material.EMPTY)
+        if not paused:
+            world.step()
+
+        status = (
+            f'{selected.name.lower()}  brush {brush}  {clock.get_fps():.0f} fps'
+            f'{"  [paused]" if paused else ""}  |  1 sand 2 water 3 stone, rmb erase'
+        )
+        draw(win, world, status)
         clock.tick(FPS)
 
 
