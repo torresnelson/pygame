@@ -15,20 +15,22 @@ this:
 
     source .venv/bin/activate
 
-Then use the `pip` commande to install the package `pygame`:
+Then install the project with its dev tools (`pygame`, `pytest`,
+`ruff`):
 
-    pip install pygame
+    pip install -e '.[dev]'
 
 ## Nixos installation
 
-In case you're using nixos, use this:
+In case you're using nixos, use this (it provides `pygame`,
+`pytest` and `ruff`, no pip needed):
 
     nix-shell
 
-## How to play tetris clon?
+## How to play?
 
-Run one of the following commands to run a game (need to be in the
-project's root):
+Run one of the following commands to run a game (from the
+project's root or anywhere else):
 
     python src/tetris/tetris.py
 
@@ -36,3 +38,10 @@ project's root):
 
     python src/sand_simulator/sand_simulator.py
 
+Tetris stores the best score in `src/tetris/scores.txt` (ignored
+by git, created on first game over).
+
+## Development
+
+    ruff check .
+    pytest
