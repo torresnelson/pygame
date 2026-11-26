@@ -42,9 +42,10 @@ jobs:
       - name: Build web version
         run: python tools/build_life_web.py
 
+      # Site layout: /gameoflife/ holds the game, / redirects to it.
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: build/life_web/build/web
+          path: build/site
 
   deploy:
     needs: build

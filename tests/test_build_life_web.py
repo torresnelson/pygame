@@ -1,7 +1,7 @@
 import ast
 from pathlib import Path
 
-from build_life_web import MAIN, SOURCES, assemble, pygbag_command
+from build_life_web import MAIN, SITE_PATH, SOURCES, assemble, pygbag_command, stage_site
 
 
 def test_sources_exist() -> None:
@@ -45,6 +45,29 @@ def test_assembled_app_imports_resolve_within_the_folder(tmp_path: Path) -> None
                 names = [node.module.split('.')[0]]
             for name in names:
                 assert name in local | stdlib_or_pygame, f'{path.name} imports {name}'
+
+
+def test_stage_site_puts_game_in_subfolder_and_redirects_root(tmp_path: Path) -> None:
+    web = tmp_path / 'web'
+    web.mkdir()
+    (web / 'index.html').write_text('game')
+    (web / 'life_web.apk').write_bytes(b'apk')
+    site = tmp_path / 'site'
+    (site / 'stale').mkdir(parents=True)
+
+    game_dir = stage_site(web, site, 'gameoflife')
+
+    assert game_dir == site / 'gameoflife'
+    assert sorted(p.name for p in site.iterdir()) == ['gameoflife', 'index.html']
+    assert (game_dir / 'index.html').read_text() == 'game'
+    assert (game_dir / 'life_web.apk').read_bytes() == b'apk'
+    root = (site / 'index.html').read_text()
+    assert 'url=gameoflife/' in root
+    assert "location.replace('gameoflife/'" in root
+
+
+def test_default_site_path_is_gameoflife() -> None:
+    assert SITE_PATH == 'gameoflife'
 
 
 def test_pygbag_command() -> None:

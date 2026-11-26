@@ -73,12 +73,14 @@ The game of life also runs in the browser through
 WebAssembly), using the same code as the desktop version.
 
     pip install -e '.[web]'
-    python tools/build_life_web.py           # static site in build/life_web/build/web
+    python tools/build_life_web.py           # static site in build/site (game in build/site/gameoflife)
     python tools/build_life_web.py --serve   # local test server on http://localhost:8000
 
 Every push to `master` builds it and publishes it to GitHub Pages
-(`.github/workflows/life-web.yml`). The first visit downloads the
-Python runtime, so it takes a few seconds to start.
+(`.github/workflows/life-web.yml`) at
+https://torresnelson.github.io/pygame/gameoflife/ (the site root
+redirects there). The first visit downloads the Python runtime, so it
+takes a few seconds to start.
 
 ## Development
 
