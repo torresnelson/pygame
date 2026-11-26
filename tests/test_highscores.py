@@ -91,3 +91,17 @@ def test_load_imports_legacy_scores_txt(tmp_path: Path) -> None:
 def test_default_paths_live_next_to_module() -> None:
     assert highscores.HIGHSCORES_FILE.parent.name == 'tetris'
     assert highscores.LEGACY_FILE.name == 'scores.txt'
+
+
+def test_json_round_trip() -> None:
+    entries = [Entry('ANA', 50, 4, 0, '2026-11-26'), Entry('BOB', 90)]
+    assert highscores.from_json(highscores.to_json(entries)) == ranked(entries)
+
+
+def test_from_json_rejects_garbage() -> None:
+    for text in ('not json', '[{"nope": 1}]'):
+        try:
+            highscores.from_json(text)
+        except (ValueError, TypeError):
+            continue
+        raise AssertionError(f'accepted {text!r}')

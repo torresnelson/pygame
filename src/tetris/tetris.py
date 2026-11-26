@@ -3,10 +3,18 @@
 Everything is drawn on a 400x350 canvas with a built-in pixel font, then
 scaled up 2x without smoothing and overlaid with faint scanlines.
 
-Menu: up/down + enter or the mouse. In game: left/right move, up rotates,
-down soft drops, space hard drops, p pauses, esc ends the game.
+Menu: up/down + enter, the mouse or a tap. In game: left/right move, up
+rotates, down soft drops, space hard drops, p pauses, esc ends the game.
+On a touch screen: tap rotates, drag sideways moves, drag down soft drops,
+flick down hard drops, and the PAUSE / END buttons replace p and esc. Names
+for the high score table can be typed or tapped on an on-screen keyboard.
+
+The loops are async and yield once per frame so the same code runs in the
+browser through pygbag (see tools/build_web.py), where scores go to
+localStorage.
 '''
 
+import asyncio
 import random
 import sys
 from dataclasses import dataclass
@@ -17,16 +25,19 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / 'shared'))
 
 import pixelfont
 import pygame
+from browser import WEB, load_text, prepare_page, save_text
 from highscores import (
     DEFAULT_NAME,
     NAME_LENGTH,
     Entry,
     best,
+    from_json,
     insert,
     load,
     new_entry,
     qualifies,
     save,
+    to_json,
 )
 from tetris_logic import (
     COLUMNS,
@@ -50,6 +61,7 @@ from tetris_logic import (
     score_for_lines,
     try_move,
 )
+from touch import Button, Drag, button_at, drag_steps, release_gesture, start_drag
 
 SCALE = 2
 WIDTH, HEIGHT = 400, 350
@@ -75,9 +87,21 @@ RANK_COLORS = (GOLD, SILVER, BRONZE)
 WHITE_MASK: Color = (255, 255, 255)
 SCANLINE_MASK: Color = (190, 190, 190)
 
-MENU_OPTIONS = ('PLAY', 'HIGH SCORES', 'QUIT')
-MENU_BOX = pygame.Rect(105, 150, 190, 92)
+# A browser tab has nothing to quit to.
+MENU_OPTIONS = ('PLAY', 'HIGH SCORES') if WEB else ('PLAY', 'HIGH SCORES', 'QUIT')
 MENU_ROW = 26
+MENU_BOX = pygame.Rect(105, 150, 190, 14 + len(MENU_OPTIONS) * MENU_ROW)
+
+GAME_BUTTONS = (
+    Button('pause', 'PAUSE', (WIDTH - 110, 262, 100, 32)),
+    Button('end', 'END', (WIDTH - 110, 302, 100, 32)),
+)
+
+KEY_ROWS = ('ABCDEFGHIJ', 'KLMNOPQRST', 'UVWXYZ0123', '456789')
+KEY_W, KEY_H, KEY_GAP = 34, 22, 4
+KEYBOARD_X, KEYBOARD_Y = 12, 190
+
+STORAGE_KEY = 'tetris-highscores'
 
 
 @dataclass(frozen=True)
@@ -123,8 +147,38 @@ def cycle_color(period_ms: int = 120) -> Color:
 
 
 def quit_game() -> None:
+    '''Close the game on desktop; a no-op in the browser.'''
+    if WEB:
+        return
     pygame.quit()
     sys.exit()
+
+
+async def wait_ms(ms: int) -> None:
+    '''Keep the window responsive (and the browser running) for `ms`.'''
+    clock = pygame.time.Clock()
+    end = pygame.time.get_ticks() + ms
+    while pygame.time.get_ticks() < end:
+        pygame.event.pump()
+        clock.tick(FPS)
+        await asyncio.sleep(0)
+
+
+def load_scores() -> list[Entry]:
+    if not WEB:
+        return load()
+    text = load_text(STORAGE_KEY)
+    try:
+        return from_json(text) if text else []
+    except (ValueError, TypeError):
+        return []
+
+
+def save_scores(entries: list[Entry]) -> None:
+    if WEB:
+        save_text(STORAGE_KEY, to_json(entries))
+    else:
+        save(entries)
 
 
 # -- drawing primitives ------------------------------------------------------
@@ -216,11 +270,13 @@ def draw_menu(canvas: pygame.Surface, selected: int, entries: list[Entry],
             pixelfont.draw(canvas, '>', (MENU_BOX.x + 14, y), GOLD, 2)
 
     if blink(500):
-        pixelfont.draw(canvas, 'PRESS ENTER', (WIDTH // 2, 278), WHITE, 2, center=True)
-    pixelfont.draw(canvas, 'UP/DOWN + ENTER OR MOUSE', (WIDTH // 2, 330), DIM, center=True)
+        prompt = 'TAP TO CHOOSE' if WEB else 'PRESS ENTER'
+        pixelfont.draw(canvas, prompt, (WIDTH // 2, 278), WHITE, 2, center=True)
+    if not WEB:
+        pixelfont.draw(canvas, 'UP/DOWN + ENTER OR MOUSE', (WIDTH // 2, 330), DIM, center=True)
 
 
-def main_menu(screen: Screen, entries: list[Entry]) -> str:
+async def main_menu(screen: Screen, entries: list[Entry]) -> str:
     '''Show the menu until an option is chosen; return its name.'''
     clock = pygame.time.Clock()
     rng = random.Random()
@@ -254,6 +310,7 @@ def main_menu(screen: Screen, entries: list[Entry]) -> str:
         draw_menu(screen.canvas, selected, entries, drops)
         present(screen)
         clock.tick(FPS)
+        await asyncio.sleep(0)
 
 
 # -- high scores -------------------------------------------------------------
@@ -280,10 +337,12 @@ def draw_highscores(canvas: pygame.Surface, entries: list[Entry], highlight: int
         for (x, _), value in zip(SCORE_COLUMNS, values, strict=True):
             pixelfont.draw(canvas, value, (x, y), color, 2)
     if blink(500):
-        pixelfont.draw(canvas, 'PRESS ANY KEY', (WIDTH // 2, 332), WHITE, center=True)
+        prompt = 'TAP TO CONTINUE' if WEB else 'PRESS ANY KEY'
+        pixelfont.draw(canvas, prompt, (WIDTH // 2, 332), WHITE, center=True)
 
 
-def show_highscores(screen: Screen, entries: list[Entry], highlight: int | None = None) -> None:
+async def show_highscores(screen: Screen, entries: list[Entry],
+                          highlight: int | None = None) -> None:
     clock = pygame.time.Clock()
     while True:
         for event in pygame.event.get():
@@ -296,6 +355,7 @@ def show_highscores(screen: Screen, entries: list[Entry], highlight: int | None 
         draw_highscores(screen.canvas, entries, highlight)
         present(screen)
         clock.tick(FPS)
+        await asyncio.sleep(0)
 
 
 def accept_char(name: str, char: str) -> str:
@@ -306,31 +366,69 @@ def accept_char(name: str, char: str) -> str:
     return name
 
 
+def make_keyboard() -> tuple[Button, ...]:
+    '''On-screen keys: one per character, then wide DEL and OK keys on the last row.'''
+    keys = []
+    for r, row in enumerate(KEY_ROWS):
+        y = KEYBOARD_Y + r * (KEY_H + KEY_GAP)
+        for c, char in enumerate(row):
+            keys.append(Button(char, char, (KEYBOARD_X + c * (KEY_W + KEY_GAP), y, KEY_W, KEY_H)))
+    wide = 2 * KEY_W + KEY_GAP
+    x = KEYBOARD_X + len(KEY_ROWS[-1]) * (KEY_W + KEY_GAP)
+    keys.append(Button('DEL', 'DEL', (x, y, wide, KEY_H)))
+    keys.append(Button('OK', 'OK', (x + wide + KEY_GAP, y, wide, KEY_H)))
+    return tuple(keys)
+
+
+KEYBOARD = make_keyboard()
+
+
+def press_key(name: str, action: str) -> str:
+    '''Apply an on-screen key (other than OK) to `name`.'''
+    return name[:-1] if action == 'DEL' else accept_char(name, action)
+
+
+def draw_button(canvas: pygame.Surface, button: Button, label: str | None = None,
+                color: Color = WHITE) -> None:
+    draw_box(canvas, button.rect)
+    rect = pygame.Rect(button.rect)
+    pixelfont.draw(canvas, label or button.label, rect.center, color, 2, center=True)
+
+
 def draw_name_entry(canvas: pygame.Surface, result: GameResult, name: str) -> None:
     canvas.fill(BLACK)
-    pixelfont.draw(canvas, 'NEW HIGH SCORE!', (WIDTH // 2, 60), cycle_color(), 3,
+    pixelfont.draw(canvas, 'NEW HIGH SCORE!', (WIDTH // 2, 36), cycle_color(), 3,
                    shadow=BLACK, center=True)
-    pixelfont.draw(canvas, str(result.score), (WIDTH // 2, 112), GOLD, 4,
+    pixelfont.draw(canvas, str(result.score), (WIDTH // 2, 78), GOLD, 4,
                    shadow=shade(GOLD, -0.7), center=True)
     details = f'{result.lines} LINES  LEVEL {result.level}'
-    pixelfont.draw(canvas, details, (WIDTH // 2, 145), DIM, center=True)
-    pixelfont.draw(canvas, 'ENTER YOUR NAME', (WIDTH // 2, 190), WHITE, 2, center=True)
-    box = pygame.Rect(80, 210, 240, 36)
+    pixelfont.draw(canvas, details, (WIDTH // 2, 104), DIM, center=True)
+    pixelfont.draw(canvas, 'ENTER YOUR NAME', (WIDTH // 2, 126), WHITE, 2, center=True)
+    box = pygame.Rect(80, 140, 240, 36)
     draw_box(canvas, box)
     text_rect = pixelfont.draw(canvas, name, (box.x + 14, box.y + 11), WHITE, 2)
     if blink(300) and len(name) < NAME_LENGTH:
         canvas.fill(GOLD, (text_rect.right + 2 if name else box.x + 14, box.y + 11, 10, 14))
-    pixelfont.draw(canvas, 'ENTER TO SAVE', (WIDTH // 2, 275), DIM, center=True)
+    for key in KEYBOARD:
+        draw_button(canvas, key, color=GOLD if key.action == 'OK' else WHITE)
+    hint = 'TAP OK TO SAVE' if WEB else 'TYPE OR CLICK, ENTER TO SAVE'
+    pixelfont.draw(canvas, hint, (WIDTH // 2, 310), DIM, center=True)
 
 
-def enter_name(screen: Screen, result: GameResult, default: str) -> str:
-    '''Let the player type a name for the high score table.'''
+async def enter_name(screen: Screen, result: GameResult, default: str) -> str:
+    '''Let the player type (or tap) a name for the high score table.'''
     clock = pygame.time.Clock()
     name = default.upper()
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 quit_game()
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                action = button_at(KEYBOARD, to_canvas(event.pos))
+                if action == 'OK':
+                    return name
+                if action:
+                    name = press_key(name, action)
             if event.type != pygame.KEYDOWN:
                 continue
             if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
@@ -344,6 +442,7 @@ def enter_name(screen: Screen, result: GameResult, default: str) -> str:
         draw_name_entry(screen.canvas, result, name)
         present(screen)
         clock.tick(FPS)
+        await asyncio.sleep(0)
 
 
 # -- game --------------------------------------------------------------------
@@ -392,22 +491,28 @@ def draw_next(canvas: pygame.Surface, piece: Piece) -> None:
         draw_tile(canvas, piece.color, left + (x - min_x) * size, top + (y - min_y) * size, size)
 
 
-def draw_keys(canvas: pygame.Surface) -> None:
-    box = pygame.Rect(WIDTH - 110, BOARD_Y + 104, 100, 104)
-    draw_box(canvas, box, 'KEYS')
-    keys = ('<> MOVE', 'UP ROTATE', 'DN SOFT', 'SPC DROP', 'P  PAUSE', 'ESC END')
-    for i, line in enumerate(keys):
-        pixelfont.draw(canvas, line, (box.x + 10, box.y + 12 + i * 14), DIM)
+def draw_help(canvas: pygame.Surface, box: tuple[int, int, int, int], title: str,
+              lines: tuple[str, ...]) -> None:
+    draw_box(canvas, box, title)
+    for i, line in enumerate(lines):
+        pixelfont.draw(canvas, line, (box[0] + 10, box[1] + 12 + i * 14), DIM)
 
 
 def draw_game(canvas: pygame.Surface, grid: Grid, next_piece: Piece, score: int,
-              lines: int, level: int, top: int, flash: set[int] | None = None) -> None:
+              lines: int, level: int, top: int, flash: set[int] | None = None,
+              paused: bool = False) -> None:
     canvas.fill(BLACK)
     draw_title(canvas, 17, 2)
     draw_board(canvas, grid, flash)
     draw_stats(canvas, score, lines, level, top)
     draw_next(canvas, next_piece)
-    draw_keys(canvas)
+    draw_help(canvas, (WIDTH - 110, BOARD_Y + 104, 100, 104), 'KEYS',
+              ('<> MOVE', 'UP ROTATE', 'DN SOFT', 'SPC DROP', 'P  PAUSE', 'ESC END'))
+    draw_help(canvas, (10, 260, 100, 76), 'TOUCH',
+              ('TAP  ROTATE', 'DRAG MOVE', 'DRAG DN SOFT', 'FLICK DROP'))
+    for button in GAME_BUTTONS:
+        label = 'RESUME' if paused and button.action == 'pause' else None
+        draw_button(canvas, button, label)
 
 
 def draw_overlay(canvas: pygame.Surface, title: str, subtitle: str) -> None:
@@ -417,16 +522,23 @@ def draw_overlay(canvas: pygame.Surface, title: str, subtitle: str) -> None:
     pixelfont.draw(canvas, subtitle, (box.centerx, box.y + 42), DIM, center=True)
 
 
-def flash_rows(screen: Screen, grid: Grid, rows: set[int], *stats: object) -> None:
+async def flash_rows(screen: Screen, grid: Grid, rows: set[int], *stats: object) -> None:
     '''Blink completed rows a few times before they are cleared.'''
     for i in range(6):
         draw_game(screen.canvas, grid, *stats, flash=rows if i % 2 == 0 else None)
         present(screen)
-        pygame.event.pump()
-        pygame.time.delay(55)
+        await wait_ms(55)
 
 
-def play(screen: Screen, top: int) -> GameResult:
+def shift(piece: Piece, grid: Grid, columns: int, rows: int) -> None:
+    '''Move `piece` one cell at a time so it stops at the first obstacle.'''
+    for _ in range(abs(columns)):
+        try_move(piece, grid, dx=1 if columns > 0 else -1)
+    for _ in range(rows):
+        try_move(piece, grid, dy=1)
+
+
+async def play(screen: Screen, top: int) -> GameResult:
     locked: dict = {}
     current_piece = new_piece()
     next_piece = new_piece()
@@ -434,6 +546,7 @@ def play(screen: Screen, top: int) -> GameResult:
     fall_ms = 0.0
     score = lines = level = 0
     paused = False
+    drag: Drag | None = None
 
     while True:
         elapsed = clock.tick(FPS)
@@ -444,6 +557,29 @@ def play(screen: Screen, top: int) -> GameResult:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 quit_game()
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                pos = to_canvas(event.pos)
+                action = button_at(GAME_BUTTONS, pos)
+                if action == 'pause':
+                    paused = not paused
+                elif action == 'end':
+                    ended = True
+                else:
+                    drag = start_drag(pos, pygame.time.get_ticks())
+            elif event.type == pygame.MOUSEMOTION and drag:
+                columns, rows = drag_steps(drag, to_canvas(event.pos), BLOCK)
+                if not paused:
+                    shift(current_piece, grid, columns, rows)
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1 and drag:
+                gesture = release_gesture(drag, to_canvas(event.pos), pygame.time.get_ticks())
+                drag = None
+                if paused:
+                    paused = gesture != 'tap'
+                elif gesture == 'tap':
+                    try_move(current_piece, grid, rotate=1)
+                elif gesture == 'flick_down':
+                    hard_drop(current_piece, grid)
+                    lock_now = True
             if event.type != pygame.KEYDOWN:
                 continue
             if event.key == pygame.K_p:
@@ -475,8 +611,8 @@ def play(screen: Screen, top: int) -> GameResult:
             locked = lock_piece(current_piece, locked)
             completed = full_rows(locked)
             if completed:
-                flash_rows(screen, create_grid(locked), completed,
-                           next_piece, score, lines, level, top)
+                await flash_rows(screen, create_grid(locked), completed,
+                                 next_piece, score, lines, level, top)
             locked, cleared = clear_rows(locked)
             score += score_for_lines(cleared, level)
             lines += cleared
@@ -488,43 +624,50 @@ def play(screen: Screen, top: int) -> GameResult:
             if y >= 0:
                 grid[y][x] = current_piece.color
 
-        draw_game(screen.canvas, grid, next_piece, score, lines, level, top)
+        draw_game(screen.canvas, grid, next_piece, score, lines, level, top, paused=paused)
         if paused:
-            draw_overlay(screen.canvas, 'PAUSED', 'P RESUME  ESC END')
+            draw_overlay(screen.canvas, 'PAUSED', 'TAP RESUME' if WEB else 'P RESUME  ESC END')
         present(screen)
+        await asyncio.sleep(0)
 
         if ended or check_lost(locked):
             draw_overlay(screen.canvas, 'GAME OVER', f'{score} POINTS')
             present(screen)
-            pygame.time.delay(1500)
+            await wait_ms(1500)
             pygame.event.clear()
             return GameResult(score, lines, level)
 
 
-def main(screen: Screen) -> None:
-    entries = load()
+async def game_loop(screen: Screen) -> None:
+    entries = load_scores()
     last_name = DEFAULT_NAME
     while True:
-        choice = main_menu(screen, entries)
+        choice = await main_menu(screen, entries)
         if choice == 'QUIT':
             quit_game()
+            continue
         if choice == 'HIGH SCORES':
-            show_highscores(screen, entries)
+            await show_highscores(screen, entries)
             continue
 
-        result = play(screen, best(entries))
+        result = await play(screen, best(entries))
         if not qualifies(entries, result.score):
-            show_highscores(screen, entries)
+            await show_highscores(screen, entries)
             continue
-        last_name = enter_name(screen, result, last_name)
+        last_name = await enter_name(screen, result, last_name)
         entry = new_entry(last_name, result.score, result.lines, result.level)
         entries, rank = insert(entries, entry)
-        save(entries)
-        show_highscores(screen, entries, rank)
+        save_scores(entries)
+        await show_highscores(screen, entries, rank)
+
+
+async def main() -> None:
+    pygame.init()
+    prepare_page()
+    window = pygame.display.set_mode(WINDOW_SIZE)
+    pygame.display.set_caption('Tetris')
+    await game_loop(make_screen(window))
 
 
 if __name__ == '__main__':
-    pygame.init()
-    window = pygame.display.set_mode(WINDOW_SIZE)
-    pygame.display.set_caption('Tetris')
-    main(make_screen(window))
+    asyncio.run(main())
