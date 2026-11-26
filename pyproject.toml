@@ -1,0 +1,32 @@
+[project]
+name = 'pygame-sandbox'
+version = '0.1.0'
+description = 'Small pygame experiments: tetris, game of life and a sand simulator.'
+readme = 'README.md'
+requires-python = '>=3.11'
+dependencies = ['pygame>=2.5']
+
+[project.optional-dependencies]
+dev = ['pytest>=8', 'ruff>=0.5']
+
+[tool.pytest.ini_options]
+testpaths = ['tests']
+pythonpath = ['src/tetris', 'src/game_of_life', 'src/sand_simulator']
+
+[tool.ruff]
+line-length = 100
+# Legacy scripts not yet cleaned up; drop entries as they get refactored.
+extend-exclude = [
+    'src/tetris/tetris.py',
+    'src/game_of_life/game_of_life.py',
+    'src/game_of_life/square.py',
+    'src/sand_simulator/sand_simulator.py',
+]
+
+[tool.ruff.lint]
+select = ['E', 'F', 'I', 'Q', 'UP', 'B']
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = 'single'
+multiline-quotes = 'single'
+docstring-quotes = 'single'

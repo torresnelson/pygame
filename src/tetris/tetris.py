@@ -1,6 +1,8 @@
-import pygame
 import random
- 
+
+import pygame
+from scores import read_max_score, save_max_score
+
 # creating the data structure for pieces
 # setting up global vars
 # functions
@@ -270,20 +272,11 @@ def draw_next_shape(shape, surface):
  
 
 def update_score(nscore):
-    score = max_score()
-
-    with open('scores.txt', 'w') as f:
-        if int(score) > nscore:
-            f.write(str(score))
-        else:
-            f.write(str(nscore))
+    save_max_score(nscore)
 
 
 def max_score():
-    with open('scores.txt', 'r') as f:
-        lines = f.readlines()
-        score = lines[0].strip()
-    return score  
+    return read_max_score()
 
 
 def draw_window(surface, score=0):
