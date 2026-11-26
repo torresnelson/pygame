@@ -18,7 +18,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / 'shared'))
 
 import pixelfont
 import pygame
-from browser import WEB, prepare_page
+from browser import WEB, keep_fitted, prepare_page
 from materials import PROPS, Material, palette
 from touch import Button, button_at, button_row
 from world import World
@@ -128,6 +128,7 @@ def draw(win: pygame.Surface, world: World, status: str, tool: Material, paused:
         label = 'PLAY' if paused and button.action == 'pause' else button.label
         draw_button(win, button, label, active)
     pygame.display.update()
+    keep_fitted(*WINDOW_SIZE, pygame.time.get_ticks())
 
 
 def quit_game() -> None:
@@ -202,6 +203,7 @@ def draw_menu(win: pygame.Surface) -> None:
     pixelfont.draw(win, 'TITOREBOOT INC', (S_WIDTH // 2, 3 * S_HEIGHT // 4 + 40), RED, 2,
                    center=True)
     pygame.display.update()
+    keep_fitted(*WINDOW_SIZE, pygame.time.get_ticks())
 
 
 async def main_menu(win: pygame.Surface) -> None:

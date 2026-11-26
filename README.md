@@ -66,8 +66,10 @@ Controls:
   cells while paused, `+` `-` change speed, `r` reloads the
   pattern, `c` clears, `esc` goes back to the picker. The button
   bar under the board does the same with a click or a tap; on a
-  touch screen the first tap in the picker previews a pattern and
-  the second one loads it.
+  touch screen a tap in the picker previews a pattern and START
+  loads it. On a phone held upright the game uses a portrait
+  layout with two rows of big buttons under the board, and follows
+  the phone when it is turned (`--portrait` shows it on desktop).
 - sand simulator: left mouse (or a finger) paints, right mouse
   erases, `1` sand, `2` water, `3` stone, `4` eraser, mouse wheel
   or `[` `]` brush size, `space` pause, `c` clear, `esc` back to

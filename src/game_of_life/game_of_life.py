@@ -1,10 +1,14 @@
 '''Conway's Game of Life with a pattern picker; runs on desktop and in the browser.
 
-Start screen: up/down (or click) to pick a pattern, enter to load it. On a
-touch screen the first tap previews a pattern and a second tap loads it.
+Start screen: up/down (or click) to pick a pattern, enter or START to load
+it. On a touch screen a tap previews a pattern and START loads it.
 Board: space run/pause, n step once, click toggles cells while paused,
 +/- speed, r reload pattern, c clear, esc back to the pattern picker. The
 button bar under the board does the same with a tap.
+
+A phone held upright gets a portrait layout (taller canvas, two rows of big
+buttons); the layout follows the phone when it is turned. On desktop,
+`--portrait` shows that layout.
 
 The loops are async and yield once per frame so the same code runs in the
 browser through pygbag (see tools/build_web.py).
@@ -12,6 +16,7 @@ browser through pygbag (see tools/build_web.py).
 
 import asyncio
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 # Shared modules (pixel font) live in src/shared; the web build copies them alongside.
@@ -19,7 +24,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / 'shared'))
 
 import pixelfont
 import pygame
-from browser import WEB, prepare_page
+from browser import WEB, fit_canvas, is_portrait, prepare_page
 from life import Cell, cell_at, next_generation, toggle
 from patterns import CATALOGUE, Pattern, build
 from touch import Button, button_at, button_row, is_touch
@@ -44,13 +49,15 @@ FPS = 60
 
 BOARD_SIZE = AMOUNT * SIZE + (AMOUNT - 1) * GAP
 STATUS_HEIGHT = 36
+BAR_TOP = BOARD_SIZE + STATUS_HEIGHT
 BAR_HEIGHT = 56
-DISPLAY_SIZE = (BOARD_SIZE, BOARD_SIZE + STATUS_HEIGHT + BAR_HEIGHT)
+DISPLAY_SIZE = (BOARD_SIZE, BAR_TOP + BAR_HEIGHT)
+ORIENTATION_CHECK_MS = 250
 
 BOARD_BUTTONS = button_row(
     (('run', 'RUN'), ('step', 'STEP'), ('slower', '-'), ('faster', '+'),
      ('reset', 'RESET'), ('clear', 'CLEAR'), ('back', 'BACK')),
-    8, BOARD_SIZE + STATUS_HEIGHT, BOARD_SIZE - 16, BAR_HEIGHT - 8, 8,
+    8, BAR_TOP, BOARD_SIZE - 16, BAR_HEIGHT - 8, 8,
 )
 KEY_ACTIONS = {
     pygame.K_SPACE: 'run',
@@ -69,6 +76,71 @@ MENU_TOP = 96
 MENU_ROW = 34
 PREVIEW = pygame.Rect(BOARD_SIZE - 232, MENU_TOP - 4, 214, 214)
 DESCRIPTION_CHARS = 17  # fits PREVIEW.width at font scale 2
+DESCRIPTION_ROW = 22
+
+
+@dataclass(frozen=True)
+class Layout:
+    '''Window size and touch targets for one orientation.'''
+
+    name: str
+    size: tuple[int, int]
+    buttons: tuple[Button, ...]  # board controls
+    start: Button  # loads the selected pattern from the picker
+    label_scale: int
+
+
+LANDSCAPE = Layout(
+    name='landscape',
+    size=DISPLAY_SIZE,
+    buttons=BOARD_BUTTONS,
+    start=Button('start', 'START', (PREVIEW.left, 452, PREVIEW.width, 48)),
+    label_scale=2,
+)
+
+# Portrait: same board, then two rows of thumb-sized buttons under it.
+PORTRAIT_ROW = 150
+PORTRAIT = Layout(
+    name='portrait',
+    size=(BOARD_SIZE, BAR_TOP + 2 * PORTRAIT_ROW + 3 * 8),
+    buttons=(
+        button_row((('run', 'RUN'), ('step', 'STEP'), ('slower', '-'), ('faster', '+')),
+                   8, BAR_TOP + 8, BOARD_SIZE - 16, PORTRAIT_ROW, 8)
+        + button_row((('reset', 'RESET'), ('clear', 'CLEAR'), ('back', 'BACK')),
+                     8, BAR_TOP + 16 + PORTRAIT_ROW, BOARD_SIZE - 16, PORTRAIT_ROW, 8)
+    ),
+    start=Button('start', 'START', (8, BAR_TOP + 16 + PORTRAIT_ROW, BOARD_SIZE - 16,
+                                    PORTRAIT_ROW)),
+    label_scale=3,
+)
+
+
+@dataclass
+class Screen:
+    display: pygame.Surface
+    layout: Layout
+    checked_ms: int = 0
+
+
+def pick_layout(portrait: bool) -> Layout:
+    return PORTRAIT if portrait else LANDSCAPE
+
+
+def make_screen(layout: Layout) -> Screen:
+    return Screen(pygame.display.set_mode(layout.size), layout, pygame.time.get_ticks())
+
+
+def follow_orientation(screen: Screen) -> None:
+    '''In the browser, switch layouts when the phone is turned and keep the canvas fitted.'''
+    now = pygame.time.get_ticks()
+    if not WEB or now - screen.checked_ms < ORIENTATION_CHECK_MS:
+        return
+    screen.checked_ms = now
+    layout = pick_layout(is_portrait())
+    if layout != screen.layout:
+        screen.display = pygame.display.set_mode(layout.size)
+        screen.layout = layout
+    fit_canvas(*screen.layout.size)
 
 
 def wrap(value: str, width: int) -> list[str]:
@@ -105,15 +177,15 @@ def quit_game() -> None:
 # -- pattern picker ----------------------------------------------------------
 
 
-def pick_tap(selected: int, index: int, touch: bool) -> tuple[int, bool]:
+def pick_tap(index: int, touch: bool) -> tuple[int, bool]:
     '''Handle a click on menu row `index`: return (selected, start it?).
 
     A mouse hovers before it clicks, so a click starts right away. A finger
-    cannot hover, so its first tap only selects (to show the preview).
+    cannot hover, so a tap only selects (to show the preview) and START loads
+    it; asking for a second tap would be a double tap, which some phone
+    browsers turn into a zoom.
     '''
-    if touch and index != selected:
-        return index, False
-    return index, True
+    return index, not touch
 
 
 def menu_index_at(pos: tuple[int, int]) -> int | None:
@@ -140,10 +212,17 @@ def draw_preview(display: pygame.Surface, pattern: Pattern) -> None:
         pygame.draw.rect(display, ALIVE_CELL, (left + c * cell, top + r * cell, cell - 1, cell - 1))
 
 
-def draw_menu(display: pygame.Surface, selected: int) -> None:
+def draw_button(display: pygame.Surface, button: Button, label: str, scale: int,
+                color: tuple = TEXT) -> None:
+    pygame.draw.rect(display, HIGHLIGHT, button.rect)
+    pygame.draw.rect(display, MUTED, button.rect, 1)
+    pixelfont.draw(display, label, pygame.Rect(button.rect).center, color, scale, center=True)
+
+
+def draw_menu(display: pygame.Surface, layout: Layout, selected: int) -> None:
     display.fill(BACKGROUND)
     pixelfont.draw(display, 'GAME OF LIFE', (20, 18), ACCENT, 4, shadow=SHADOW)
-    hint = 'TAP TO PREVIEW, AGAIN TO START' if WEB else 'UP/DOWN + ENTER, OR CLICK'
+    hint = 'TAP A PATTERN, THEN START' if WEB else 'UP/DOWN + ENTER, OR CLICK'
     pixelfont.draw(display, hint, (20, 60), MUTED, 2)
     for i, pattern in enumerate(CATALOGUE):
         y = MENU_TOP + i * MENU_ROW
@@ -156,11 +235,13 @@ def draw_menu(display: pygame.Surface, selected: int) -> None:
     pattern = CATALOGUE[selected]
     draw_preview(display, pattern)
     for i, line in enumerate(wrap(pattern.description, DESCRIPTION_CHARS)):
-        pixelfont.draw(display, line, (PREVIEW.left, PREVIEW.bottom + 16 + i * 22), TEXT, 2)
+        y = PREVIEW.bottom + 16 + i * DESCRIPTION_ROW
+        pixelfont.draw(display, line, (PREVIEW.left, y), TEXT, 2)
+    draw_button(display, layout.start, layout.start.label, layout.label_scale, GOLD)
     pygame.display.update()
 
 
-async def pick_pattern(display: pygame.Surface, selected: int) -> int:
+async def pick_pattern(screen: Screen, selected: int) -> int:
     '''Show the picker until a pattern is chosen; return its index.'''
     clock = pygame.time.Clock()
     while True:
@@ -181,12 +262,15 @@ async def pick_pattern(display: pygame.Surface, selected: int) -> int:
                 if index is not None:
                     selected = index
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if screen.layout.start.contains(event.pos):
+                    return selected
                 index = menu_index_at(event.pos)
                 if index is not None:
-                    selected, start = pick_tap(selected, index, is_touch(event))
+                    selected, start = pick_tap(index, is_touch(event))
                     if start:
                         return selected
-        draw_menu(display, selected)
+        draw_menu(screen.display, screen.layout, selected)
+        follow_orientation(screen)
         clock.tick(FPS)
         await asyncio.sleep(0)
 
@@ -194,14 +278,8 @@ async def pick_pattern(display: pygame.Surface, selected: int) -> int:
 # -- board -----------------------------------------------------------------
 
 
-def draw_button(display: pygame.Surface, button: Button, label: str) -> None:
-    pygame.draw.rect(display, HIGHLIGHT, button.rect)
-    pygame.draw.rect(display, MUTED, button.rect, 1)
-    pixelfont.draw(display, label, pygame.Rect(button.rect).center, TEXT, 2, center=True)
-
-
-def draw_board(display: pygame.Surface, cells: set[Cell], pattern: Pattern, status: str,
-               running: bool) -> None:
+def draw_board(display: pygame.Surface, layout: Layout, cells: set[Cell], pattern: Pattern,
+               status: str, running: bool) -> None:
     display.fill(BACKGROUND)
     for row in range(AMOUNT):
         for column in range(AMOUNT):
@@ -213,13 +291,13 @@ def draw_board(display: pygame.Surface, cells: set[Cell], pattern: Pattern, stat
     width = max(pixelfont.text_size(hint)[0], pixelfont.text_size(pattern.name)[0])
     pixelfont.draw(display, pattern.name, (BOARD_SIZE - 8 - width, BOARD_SIZE + 8), ACCENT)
     pixelfont.draw(display, hint, (BOARD_SIZE - 8 - width, BOARD_SIZE + 21), MUTED)
-    for button in BOARD_BUTTONS:
+    for button in layout.buttons:
         label = 'PAUSE' if running and button.action == 'run' else button.label
-        draw_button(display, button, label)
+        draw_button(display, button, label, layout.label_scale)
     pygame.display.update()
 
 
-async def play(display: pygame.Surface, pattern: Pattern) -> None:
+async def play(screen: Screen, pattern: Pattern) -> None:
     '''Run the board for `pattern`; returns when the player goes back to the picker.'''
     clock = pygame.time.Clock()
     cells = build(pattern, AMOUNT, AMOUNT)
@@ -237,7 +315,7 @@ async def play(display: pygame.Surface, pattern: Pattern) -> None:
             if event.type == pygame.KEYDOWN:
                 action = KEY_ACTIONS.get(event.key)
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                action = button_at(BOARD_BUTTONS, event.pos)
+                action = button_at(screen.layout.buttons, event.pos)
                 cell = cell_at(*event.pos, SIZE, GAP, AMOUNT)
                 if action is None and cell is not None and not running:
                     cells = toggle(cells, cell)
@@ -266,7 +344,8 @@ async def play(display: pygame.Surface, pattern: Pattern) -> None:
             running = running and bool(cells)
 
         status = status_text(generation, len(cells), SPEEDS[speed], running)
-        draw_board(display, cells, pattern, status, running)
+        draw_board(screen.display, screen.layout, cells, pattern, status, running)
+        follow_orientation(screen)
         clock.tick(FPS)
         await asyncio.sleep(0)
 
@@ -275,11 +354,12 @@ async def main() -> None:
     pygame.init()
     prepare_page()
     pygame.display.set_caption('Game of life')
-    display = pygame.display.set_mode(DISPLAY_SIZE)
+    portrait = is_portrait() if WEB else '--portrait' in sys.argv
+    screen = make_screen(pick_layout(portrait))
     selected = 0
     while True:
-        selected = await pick_pattern(display, selected)
-        await play(display, CATALOGUE[selected])
+        selected = await pick_pattern(screen, selected)
+        await play(screen, CATALOGUE[selected])
 
 
 if __name__ == '__main__':
