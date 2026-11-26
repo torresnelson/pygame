@@ -43,7 +43,13 @@ Controls:
 - tetris: arrows move/rotate, space hard drops. The best score is
   stored in `src/tetris/scores.txt` (ignored by git, created on
   first game over).
-- game of life: click cells to toggle them, space runs/pauses.
+- game of life: the start screen lets you pick a pattern (glider,
+  lightweight spaceship, blinker, toad, beacon, pulsar,
+  pentadecathlon, Gosper glider gun, R-pentomino, diehard, acorn,
+  random soup or an empty board) with up/down + enter or a click.
+  On the board: `space` runs/pauses, `n` steps once, click toggles
+  cells while paused, `+` `-` change speed, `r` reloads the
+  pattern, `c` clears, `esc` goes back to the picker.
 - sand simulator: left mouse paints, right mouse erases, `1` sand,
   `2` water, `3` stone, mouse wheel or `[` `]` brush size, `space`
   pause, `c` clear, `esc` back to the menu. Sand accelerates under
@@ -51,7 +57,7 @@ Controls:
   and levels out; stone stays put.
 
 Game rules live in pygame-free modules (`tetris_logic.py`,
-`life.py`, and the sand engine `world.py` + `materials.py`)
+`life.py` + `patterns.py`, and the sand engine `world.py` + `materials.py`)
 covered by the tests in `tests/`.
 
 ## Development
