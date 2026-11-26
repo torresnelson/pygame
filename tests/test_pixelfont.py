@@ -22,7 +22,7 @@ def test_every_glyph_is_5x7_of_on_and_off_cells() -> None:
 
 
 def test_letters_digits_and_ui_punctuation_are_covered() -> None:
-    assert set(string.ascii_uppercase + string.digits + ' .:!?-/>') <= CHARSET
+    assert set(string.ascii_uppercase + string.digits + ' .:!?-/>[]') <= CHARSET
 
 
 def test_glyphs_are_distinct_and_only_space_is_blank() -> None:

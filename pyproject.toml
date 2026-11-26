@@ -24,6 +24,7 @@ select = ['E', 'F', 'I', 'Q', 'UP', 'B']
 # Entry scripts add src/shared to sys.path before importing shared modules.
 'src/tetris/tetris.py' = ['E402']
 'src/game_of_life/game_of_life.py' = ['E402']
+'src/sand_simulator/sand_simulator.py' = ['E402']
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = 'single'

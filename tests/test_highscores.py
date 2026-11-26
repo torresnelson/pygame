@@ -8,12 +8,14 @@ from highscores import (
     Entry,
     best,
     clean_name,
+    from_json,
     insert,
     load,
     new_entry,
     qualifies,
     ranked,
     save,
+    to_json,
 )
 
 
@@ -91,3 +93,12 @@ def test_load_imports_legacy_scores_txt(tmp_path: Path) -> None:
 def test_default_paths_live_next_to_module() -> None:
     assert highscores.HIGHSCORES_FILE.parent.name == 'tetris'
     assert highscores.LEGACY_FILE.name == 'scores.txt'
+
+
+def test_json_roundtrip_and_bad_input() -> None:
+    entries = [Entry('b', 40), Entry('a', 1200, 12, 1, '2026-11-26')]
+    assert from_json(to_json(entries)) == ranked(entries)
+    assert from_json(None) == []
+    assert from_json('') == []
+    assert from_json('{not json') == []
+    assert from_json('[{"unexpected": 1}]') == []

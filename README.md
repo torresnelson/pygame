@@ -66,21 +66,28 @@ Game rules live in pygame-free modules (`tetris_logic.py`,
 `life.py` + `patterns.py`, and the sand engine `world.py` + `materials.py`)
 covered by the tests in `tests/`.
 
-## Game of life in the browser
+## Play in the browser
 
-The game of life also runs in the browser through
+All three games also run in the browser through
 [pygbag](https://pypi.org/project/pygbag/) (pygame compiled to
-WebAssembly), using the same code as the desktop version.
+WebAssembly), using the same code as the desktop versions:
+
+- https://torresnelson.github.io/pygame/ (landing page)
+- https://torresnelson.github.io/pygame/gameoflife/
+- https://torresnelson.github.io/pygame/tetris/ (high scores are kept
+  in the browser's local storage)
+- https://torresnelson.github.io/pygame/sandsimulator/
+
+Build locally:
 
     pip install -e '.[web]'
-    python tools/build_life_web.py           # static site in build/site (game in build/site/gameoflife)
-    python tools/build_life_web.py --serve   # local test server on http://localhost:8000
+    python tools/build_web.py                    # every game, site staged in build/site
+    python tools/build_web.py tetris             # only some games
+    python tools/build_web.py --serve tetris     # local test server on http://localhost:8000
 
-Every push to `master` builds it and publishes it to GitHub Pages
-(`.github/workflows/life-web.yml`) at
-https://torresnelson.github.io/pygame/gameoflife/ (the site root
-redirects there). The first visit downloads the Python runtime, so it
-takes a few seconds to start.
+Every push to `master` builds the site and publishes it to GitHub
+Pages (`.github/workflows/pages.yml`). The first visit downloads the
+Python runtime, so a game takes a few seconds to start.
 
 ## Development
 

@@ -51,15 +51,26 @@ def best(entries: list[Entry]) -> int:
     return max((entry.score for entry in entries), default=0)
 
 
+def from_json(text: str | None) -> list[Entry]:
+    '''Parse a stored table; missing or malformed data gives an empty table.'''
+    if not text:
+        return []
+    try:
+        return ranked([Entry(**item) for item in json.loads(text)])
+    except (ValueError, TypeError):
+        return []
+
+
+def to_json(entries: list[Entry]) -> str:
+    return json.dumps([asdict(entry) for entry in ranked(entries)], indent=2) + '\n'
+
+
 def load(path: Path = HIGHSCORES_FILE, legacy: Path = LEGACY_FILE) -> list[Entry]:
     '''Read the table; import the old single-number `scores.txt` once if present.'''
     try:
-        raw = json.loads(path.read_text())
-        return ranked([Entry(**item) for item in raw])
+        return from_json(path.read_text())
     except FileNotFoundError:
         pass
-    except (ValueError, TypeError):
-        return []
     try:
         legacy_score = int(legacy.read_text().strip() or 0)
     except (FileNotFoundError, ValueError):
@@ -68,7 +79,7 @@ def load(path: Path = HIGHSCORES_FILE, legacy: Path = LEGACY_FILE) -> list[Entry
 
 
 def save(entries: list[Entry], path: Path = HIGHSCORES_FILE) -> None:
-    path.write_text(json.dumps([asdict(entry) for entry in ranked(entries)], indent=2) + '\n')
+    path.write_text(to_json(entries))
 
 
 def new_entry(name: str, score: int, lines: int, level: int, today: date | None = None) -> Entry:
