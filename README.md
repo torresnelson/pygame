@@ -52,7 +52,12 @@ Controls:
   On a touch screen: tap rotates, drag sideways moves, drag down
   soft drops, flick down hard drops, and the PAUSE / END buttons
   replace `p` / `esc`. Names are typed or tapped on an on-screen
-  keyboard.
+  keyboard. On a phone held upright tetris switches to a portrait
+  layout: a bigger board with `<` `ROT` `>` `DOWN` `DROP` thumb
+  buttons under it (left, right and down repeat while held); it
+  follows the phone when it is turned, even mid-game. Run
+  `python src/tetris/tetris.py --portrait` to see that layout on
+  desktop.
 - game of life: the start screen lets you pick a pattern (glider,
   lightweight spaceship, blinker, toad, beacon, pulsar,
   pentadecathlon, Gosper glider gun, R-pentomino, diehard, acorn,
@@ -91,9 +96,9 @@ its high scores in `localStorage`.
 Every push to `master` builds the site and publishes it to GitHub
 Pages (`.github/workflows/web.yml`): a landing page links to
 `tetris/`, `life/` and `sand/`. The first visit downloads the
-Python runtime, so it takes a few seconds to start. Tetris and the
-sand simulator are wide, so they fill more of a phone held in
-landscape.
+Python runtime, so it takes a few seconds to start. Tetris fits a
+phone either way up; the sand simulator is wide, so it fills more of
+a phone held in landscape.
 
 Note: a plain static server on `localhost` does not work for a
 full build, because pygbag then fetches pygame from its own dev

@@ -9,6 +9,7 @@ from touch import (
     drag_steps,
     is_touch,
     release_gesture,
+    repeats,
     start_drag,
 )
 
@@ -79,3 +80,11 @@ def test_a_drag_that_moved_the_piece_is_not_a_tap() -> None:
     drag = start_drag((100, 100), 0)
     drag_steps(drag, (116, 100), 15)
     assert release_gesture(drag, (100, 100), 50) is None
+
+
+def test_repeats_wait_for_the_delay_then_tick() -> None:
+    assert repeats(0, 200, 60) == 0
+    assert repeats(199, 200, 60) == 0
+    assert repeats(200, 200, 60) == 1
+    assert repeats(259, 200, 60) == 1
+    assert repeats(260, 200, 60) == 2

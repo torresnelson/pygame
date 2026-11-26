@@ -13,6 +13,8 @@ TAP_DISTANCE = 8  # pixels a tap may wander before it counts as a drag
 TAP_MS = 300
 FLICK_DISTANCE = 30
 FLICK_MS = 300
+REPEAT_DELAY_MS = 200  # a held button starts repeating after this long
+REPEAT_MS = 60
 
 
 @dataclass(frozen=True)
@@ -84,3 +86,10 @@ def release_gesture(drag: Drag, pos: Point, now_ms: int) -> str | None:
     if not drag.moved and small and elapsed <= TAP_MS:
         return 'tap'
     return None
+
+
+def repeats(held_ms: int, delay: int = REPEAT_DELAY_MS, interval: int = REPEAT_MS) -> int:
+    '''Repeats a button held for `held_ms` should have fired so far (not counting the press).'''
+    if held_ms < delay:
+        return 0
+    return 1 + (held_ms - delay) // interval

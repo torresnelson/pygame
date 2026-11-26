@@ -9,6 +9,10 @@ On a touch screen: tap rotates, drag sideways moves, drag down soft drops,
 flick down hard drops, and the PAUSE / END buttons replace p and esc. Names
 for the high score table can be typed or tapped on an on-screen keyboard.
 
+A phone held upright gets a portrait layout (taller canvas, bigger board and
+thumb buttons under it that repeat while held); the layout follows the phone
+when it is turned. On desktop, `--portrait` shows that layout.
+
 The loops are async and yield once per frame so the same code runs in the
 browser through pygbag (see tools/build_web.py), where scores go to
 localStorage.
@@ -25,7 +29,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / 'shared'))
 
 import pixelfont
 import pygame
-from browser import WEB, load_text, prepare_page, save_text
+from browser import WEB, fit_canvas, is_portrait, load_text, prepare_page, save_text
 from highscores import (
     DEFAULT_NAME,
     NAME_LENGTH,
@@ -61,17 +65,14 @@ from tetris_logic import (
     score_for_lines,
     try_move,
 )
-from touch import Button, Drag, button_at, drag_steps, release_gesture, start_drag
+from touch import Button, Drag, button_at, drag_steps, release_gesture, repeats, start_drag
 
 SCALE = 2
+# Menu, high score and name screens use a WIDTH x HEIGHT view centred on the
+# canvas; the game screen has its own `Layout` per orientation.
 WIDTH, HEIGHT = 400, 350
-WINDOW_SIZE = (WIDTH * SCALE, HEIGHT * SCALE)
 FPS = 60
-
-BLOCK = 15
-BOARD_W, BOARD_H = COLUMNS * BLOCK, ROWS * BLOCK
-BOARD_X = (WIDTH - BOARD_W) // 2
-BOARD_Y = 40
+ORIENTATION_CHECK_MS = 250
 
 BLACK: Color = (0, 0, 0)
 WHITE: Color = (252, 252, 252)
@@ -92,10 +93,86 @@ MENU_OPTIONS = ('PLAY', 'HIGH SCORES') if WEB else ('PLAY', 'HIGH SCORES', 'QUIT
 MENU_ROW = 26
 MENU_BOX = pygame.Rect(105, 150, 190, 14 + len(MENU_OPTIONS) * MENU_ROW)
 
-GAME_BUTTONS = (
-    Button('pause', 'PAUSE', (WIDTH - 110, 262, 100, 32)),
-    Button('end', 'END', (WIDTH - 110, 302, 100, 32)),
+Box = tuple[int, int, int, int]
+
+
+@dataclass(frozen=True)
+class Layout:
+    '''Where everything on the game screen goes, for one orientation.'''
+
+    name: str
+    size: tuple[int, int]
+    block: int
+    board: tuple[int, int]
+    title_y: int
+    next_box: Box
+    next_block: int
+    stat_boxes: tuple[Box, ...]  # TOP, SCORE, LEVEL, LINES
+    help_boxes: tuple[tuple[Box, str, tuple[str, ...]], ...]
+    buttons: tuple[Button, ...]
+    hint_y: int | None = None
+
+    @property
+    def board_rect(self) -> Box:
+        x, y = self.board
+        return x, y, COLUMNS * self.block, ROWS * self.block
+
+    @property
+    def view_offset(self) -> int:
+        return (self.size[1] - HEIGHT) // 2
+
+
+LANDSCAPE = Layout(
+    name='landscape',
+    size=(WIDTH, HEIGHT),
+    block=15,
+    board=(125, 40),
+    title_y=17,
+    next_box=(290, 40, 100, 80),
+    next_block=12,
+    stat_boxes=tuple((10, 40 + i * 52, 100, 40) for i in range(4)),
+    help_boxes=(
+        ((290, 144, 100, 104), 'KEYS',
+         ('<> MOVE', 'UP ROTATE', 'DN SOFT', 'SPC DROP', 'P  PAUSE', 'ESC END')),
+        ((10, 260, 100, 76), 'TOUCH', ('TAP  ROTATE', 'DRAG MOVE', 'DRAG DN SOFT', 'FLICK DROP')),
+    ),
+    buttons=(
+        Button('pause', 'PAUSE', (290, 262, 100, 32)),
+        Button('end', 'END', (290, 302, 100, 32)),
+    ),
 )
+
+PORTRAIT = Layout(
+    name='portrait',
+    size=(WIDTH, 760),
+    block=22,
+    board=(15, 44),
+    title_y=20,
+    next_box=(250, 44, 140, 90),
+    next_block=16,
+    stat_boxes=tuple((250, 154 + i * 52, 140, 40) for i in range(4)),
+    help_boxes=(),
+    buttons=(
+        Button('pause', 'PAUSE', (250, 370, 140, 48)),
+        Button('end', 'END', (250, 430, 140, 48)),
+        Button('left', '<', (12, 502, 120, 120)),
+        Button('rotate', 'ROT', (140, 502, 120, 120)),
+        Button('right', '>', (268, 502, 120, 120)),
+        Button('down', 'DOWN', (12, 632, 184, 96)),
+        Button('drop', 'DROP', (204, 632, 184, 96)),
+    ),
+    hint_y=744,
+)
+
+# Held buttons keep moving the piece, like a held arrow key.
+REPEATING = frozenset({'left', 'right', 'down'})
+KEY_ACTIONS = {
+    pygame.K_LEFT: 'left',
+    pygame.K_RIGHT: 'right',
+    pygame.K_UP: 'rotate',
+    pygame.K_DOWN: 'down',
+    pygame.K_SPACE: 'drop',
+}
 
 KEY_ROWS = ('ABCDEFGHIJ', 'KLMNOPQRST', 'UVWXYZ0123', '456789')
 KEY_W, KEY_H, KEY_GAP = 34, 22, 4
@@ -116,26 +193,66 @@ class Screen:
     window: pygame.Surface
     canvas: pygame.Surface
     scanlines: pygame.Surface
+    layout: Layout
+    checked_ms: int = 0
+
+    @property
+    def view(self) -> pygame.Surface:
+        '''The WIDTH x HEIGHT area used by the menu, high score and name screens.'''
+        return self.canvas.subsurface((0, self.layout.view_offset, WIDTH, HEIGHT))
 
 
-def make_screen(window: pygame.Surface) -> Screen:
+def window_size(layout: Layout) -> tuple[int, int]:
+    return layout.size[0] * SCALE, layout.size[1] * SCALE
+
+
+def make_screen(layout: Layout) -> Screen:
+    size = window_size(layout)
+    window = pygame.display.set_mode(size)
     # Multiply mask (no per-pixel alpha): white keeps colours, grey darkens a row.
-    scanlines = pygame.Surface(WINDOW_SIZE)
+    scanlines = pygame.Surface(size)
     scanlines.fill(WHITE_MASK)
-    for y in range(1, WINDOW_SIZE[1], SCALE):
-        scanlines.fill(SCANLINE_MASK, (0, y, WINDOW_SIZE[0], 1))
-    return Screen(window, pygame.Surface((WIDTH, HEIGHT)), scanlines)
+    for y in range(1, size[1], SCALE):
+        scanlines.fill(SCANLINE_MASK, (0, y, size[0], 1))
+    canvas = pygame.Surface(layout.size)
+    canvas.fill(BLACK)
+    return Screen(window, canvas, scanlines, layout, pygame.time.get_ticks())
+
+
+def pick_layout(portrait: bool) -> Layout:
+    return PORTRAIT if portrait else LANDSCAPE
+
+
+def follow_orientation(screen: Screen) -> None:
+    '''In the browser, switch layouts when the phone is turned and keep the canvas fitted.'''
+    now = pygame.time.get_ticks()
+    if not WEB or now - screen.checked_ms < ORIENTATION_CHECK_MS:
+        return
+    screen.checked_ms = now
+    layout = pick_layout(is_portrait())
+    if layout != screen.layout:
+        fresh = make_screen(layout)
+        screen.window, screen.canvas, screen.scanlines = fresh.window, fresh.canvas, fresh.scanlines
+        screen.layout = layout
+    fit_canvas(*window_size(screen.layout))
 
 
 def present(screen: Screen) -> None:
     '''Scale the low-res canvas up with hard pixel edges and add scanlines.'''
-    screen.window.blit(pygame.transform.scale(screen.canvas, WINDOW_SIZE), (0, 0))
+    size = window_size(screen.layout)
+    screen.window.blit(pygame.transform.scale(screen.canvas, size), (0, 0))
     screen.window.blit(screen.scanlines, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
     pygame.display.update()
+    follow_orientation(screen)
 
 
 def to_canvas(pos: tuple[int, int]) -> tuple[int, int]:
     return pos[0] // SCALE, pos[1] // SCALE
+
+
+def to_view(screen: Screen, pos: tuple[int, int]) -> tuple[int, int]:
+    x, y = to_canvas(pos)
+    return x, y - screen.layout.view_offset
 
 
 def blink(period_ms: int = 400) -> bool:
@@ -191,7 +308,7 @@ def shade(color: Color, amount: float) -> Color:
     return r, g, b
 
 
-def draw_tile(surface: pygame.Surface, color: Color, x: int, y: int, size: int = BLOCK) -> None:
+def draw_tile(surface: pygame.Surface, color: Color, x: int, y: int, size: int) -> None:
     '''A bevelled 8-bit block: light top-left edge, dark bottom-right edge, glint.'''
     surface.fill(color, (x, y, size, size))
     light, dark = shade(color, 0.5), shade(color, -0.55)
@@ -238,8 +355,9 @@ class Drop:
     color: Color
 
 
-def new_drop(rng: random.Random, anywhere: bool = False) -> Drop:
-    y = rng.uniform(0, HEIGHT) if anywhere else -10.0
+def new_drop(rng: random.Random, height: int = 0) -> Drop:
+    '''A falling block above the top, or anywhere in the first `height` pixels.'''
+    y = rng.uniform(0, height) if height else -10.0
     return Drop(rng.randrange(WIDTH // 10) * 10, y, rng.uniform(0.3, 1.1), rng.choice(SHAPE_COLORS))
 
 
@@ -251,11 +369,12 @@ def menu_index_at(pos: tuple[int, int]) -> int | None:
     return None
 
 
-def draw_menu(canvas: pygame.Surface, selected: int, entries: list[Entry],
-              drops: list[Drop]) -> None:
-    canvas.fill(BLACK)
+def draw_drops(canvas: pygame.Surface, drops: list[Drop]) -> None:
     for drop in drops:
         draw_tile(canvas, shade(drop.color, -0.6), drop.x, int(drop.y), 10)
+
+
+def draw_menu(canvas: pygame.Surface, selected: int, entries: list[Entry]) -> None:
     draw_title(canvas, 70, 6)
     top = entries[0] if entries else None
     top_line = f'TOP {top.score}  {top.name}' if top else 'NO HIGH SCORES YET'
@@ -280,7 +399,8 @@ async def main_menu(screen: Screen, entries: list[Entry]) -> str:
     '''Show the menu until an option is chosen; return its name.'''
     clock = pygame.time.Clock()
     rng = random.Random()
-    drops = [new_drop(rng, anywhere=True) for _ in range(28)]
+    height = screen.layout.size[1]
+    drops = [new_drop(rng, height) for _ in range(28 * height // HEIGHT)]
     selected = 0
     while True:
         for event in pygame.event.get():
@@ -296,18 +416,20 @@ async def main_menu(screen: Screen, entries: list[Entry]) -> str:
                 elif event.key == pygame.K_ESCAPE:
                     return 'QUIT'
             if event.type == pygame.MOUSEMOTION:
-                index = menu_index_at(to_canvas(event.pos))
+                index = menu_index_at(to_view(screen, event.pos))
                 if index is not None:
                     selected = index
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                index = menu_index_at(to_canvas(event.pos))
+                index = menu_index_at(to_view(screen, event.pos))
                 if index is not None:
                     return MENU_OPTIONS[index]
         for i, drop in enumerate(drops):
             drop.y += drop.speed
-            if drop.y > HEIGHT:
+            if drop.y > screen.canvas.get_height():
                 drops[i] = new_drop(rng)
-        draw_menu(screen.canvas, selected, entries, drops)
+        screen.canvas.fill(BLACK)
+        draw_drops(screen.canvas, drops)
+        draw_menu(screen.view, selected, entries)
         present(screen)
         clock.tick(FPS)
         await asyncio.sleep(0)
@@ -352,7 +474,8 @@ async def show_highscores(screen: Screen, entries: list[Entry],
                 event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
             ):
                 return
-        draw_highscores(screen.canvas, entries, highlight)
+        screen.canvas.fill(BLACK)
+        draw_highscores(screen.view, entries, highlight)
         present(screen)
         clock.tick(FPS)
         await asyncio.sleep(0)
@@ -392,7 +515,8 @@ def draw_button(canvas: pygame.Surface, button: Button, label: str | None = None
                 color: Color = WHITE) -> None:
     draw_box(canvas, button.rect)
     rect = pygame.Rect(button.rect)
-    pixelfont.draw(canvas, label or button.label, rect.center, color, 2, center=True)
+    scale = 3 if rect.height >= 60 else 2
+    pixelfont.draw(canvas, label or button.label, rect.center, color, scale, center=True)
 
 
 def draw_name_entry(canvas: pygame.Surface, result: GameResult, name: str) -> None:
@@ -424,7 +548,7 @@ async def enter_name(screen: Screen, result: GameResult, default: str) -> str:
             if event.type == pygame.QUIT:
                 quit_game()
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                action = button_at(KEYBOARD, to_canvas(event.pos))
+                action = button_at(KEYBOARD, to_view(screen, event.pos))
                 if action == 'OK':
                     return name
                 if action:
@@ -439,7 +563,8 @@ async def enter_name(screen: Screen, result: GameResult, default: str) -> str:
                 name = name[:-1]
             elif event.unicode:
                 name = accept_char(name, event.unicode)
-        draw_name_entry(screen.canvas, result, name)
+        screen.canvas.fill(BLACK)
+        draw_name_entry(screen.view, result, name)
         present(screen)
         clock.tick(FPS)
         await asyncio.sleep(0)
@@ -448,41 +573,44 @@ async def enter_name(screen: Screen, result: GameResult, default: str) -> str:
 # -- game --------------------------------------------------------------------
 
 
-def draw_board(canvas: pygame.Surface, grid: Grid, flash: set[int] | None = None) -> None:
+def draw_board(canvas: pygame.Surface, layout: Layout, grid: Grid,
+               flash: set[int] | None = None) -> None:
+    left, top, width, height = layout.board_rect
+    block = layout.block
     # Frame made of small grey tiles.
-    for x in range(BOARD_X - 5, BOARD_X + BOARD_W + 5, 5):
-        draw_tile(canvas, GREY, x, BOARD_Y - 5, 5)
-        draw_tile(canvas, GREY, x, BOARD_Y + BOARD_H, 5)
-    for y in range(BOARD_Y, BOARD_Y + BOARD_H, 5):
-        draw_tile(canvas, GREY, BOARD_X - 5, y, 5)
-        draw_tile(canvas, GREY, BOARD_X + BOARD_W, y, 5)
+    for x in range(left - 5, left + width + 5, 5):
+        draw_tile(canvas, GREY, x, top - 5, 5)
+        draw_tile(canvas, GREY, x, top + height, 5)
+    for y in range(top, top + height, 5):
+        draw_tile(canvas, GREY, left - 5, y, 5)
+        draw_tile(canvas, GREY, left + width, y, 5)
 
-    canvas.fill(BOARD_BG, (BOARD_X, BOARD_Y, BOARD_W, BOARD_H))
+    canvas.fill(BOARD_BG, layout.board_rect)
     for y, row in enumerate(grid):
         for x, color in enumerate(row):
-            px, py = BOARD_X + x * BLOCK, BOARD_Y + y * BLOCK
+            px, py = left + x * block, top + y * block
             if flash and y in flash:
-                draw_tile(canvas, WHITE, px, py)
+                draw_tile(canvas, WHITE, px, py, block)
             elif color != EMPTY:
-                draw_tile(canvas, color, px, py)
+                draw_tile(canvas, color, px, py, block)
             else:
-                canvas.set_at((px + BLOCK // 2, py + BLOCK // 2), GRID_DOT)
+                canvas.set_at((px + block // 2, py + block // 2), GRID_DOT)
 
 
-def draw_stats(canvas: pygame.Surface, score: int, lines: int, level: int, top: int) -> None:
+def draw_stats(canvas: pygame.Surface, layout: Layout, score: int, lines: int, level: int,
+               top: int) -> None:
     rows = (('TOP', max(top, score), GOLD), ('SCORE', score, WHITE),
             ('LEVEL', level, WHITE), ('LINES', lines, WHITE))
-    for i, (label, value, color) in enumerate(rows):
-        box = pygame.Rect(10, BOARD_Y + i * 52, 100, 40)
+    for box, (label, value, color) in zip(layout.stat_boxes, rows, strict=True):
         draw_box(canvas, box, label)
-        pixelfont.draw(canvas, str(value), (box.x + 10, box.y + 14), color, 2)
+        pixelfont.draw(canvas, str(value), (box[0] + 10, box[1] + 14), color, 2)
 
 
-def draw_next(canvas: pygame.Surface, piece: Piece) -> None:
-    box = pygame.Rect(WIDTH - 110, BOARD_Y, 100, 80)
+def draw_next(canvas: pygame.Surface, layout: Layout, piece: Piece) -> None:
+    box = pygame.Rect(layout.next_box)
     draw_box(canvas, box, 'NEXT')
     cells = frame_positions(piece.frame)
-    size = 12
+    size = layout.next_block
     min_x, max_x = min(x for x, _ in cells), max(x for x, _ in cells)
     min_y, max_y = min(y for _, y in cells), max(y for _, y in cells)
     left = box.centerx - (max_x - min_x + 1) * size // 2
@@ -491,32 +619,33 @@ def draw_next(canvas: pygame.Surface, piece: Piece) -> None:
         draw_tile(canvas, piece.color, left + (x - min_x) * size, top + (y - min_y) * size, size)
 
 
-def draw_help(canvas: pygame.Surface, box: tuple[int, int, int, int], title: str,
-              lines: tuple[str, ...]) -> None:
+def draw_help(canvas: pygame.Surface, box: Box, title: str, lines: tuple[str, ...]) -> None:
     draw_box(canvas, box, title)
     for i, line in enumerate(lines):
         pixelfont.draw(canvas, line, (box[0] + 10, box[1] + 12 + i * 14), DIM)
 
 
-def draw_game(canvas: pygame.Surface, grid: Grid, next_piece: Piece, score: int,
-              lines: int, level: int, top: int, flash: set[int] | None = None,
+def draw_game(canvas: pygame.Surface, layout: Layout, grid: Grid, next_piece: Piece,
+              score: int, lines: int, level: int, top: int, flash: set[int] | None = None,
               paused: bool = False) -> None:
     canvas.fill(BLACK)
-    draw_title(canvas, 17, 2)
-    draw_board(canvas, grid, flash)
-    draw_stats(canvas, score, lines, level, top)
-    draw_next(canvas, next_piece)
-    draw_help(canvas, (WIDTH - 110, BOARD_Y + 104, 100, 104), 'KEYS',
-              ('<> MOVE', 'UP ROTATE', 'DN SOFT', 'SPC DROP', 'P  PAUSE', 'ESC END'))
-    draw_help(canvas, (10, 260, 100, 76), 'TOUCH',
-              ('TAP  ROTATE', 'DRAG MOVE', 'DRAG DN SOFT', 'FLICK DROP'))
-    for button in GAME_BUTTONS:
+    draw_title(canvas, layout.title_y, 2)
+    draw_board(canvas, layout, grid, flash)
+    draw_stats(canvas, layout, score, lines, level, top)
+    draw_next(canvas, layout, next_piece)
+    for box, title, lines_ in layout.help_boxes:
+        draw_help(canvas, box, title, lines_)
+    for button in layout.buttons:
         label = 'RESUME' if paused and button.action == 'pause' else None
         draw_button(canvas, button, label)
+    if layout.hint_y is not None:
+        pixelfont.draw(canvas, 'OR TAP, DRAG AND FLICK THE BOARD', (WIDTH // 2, layout.hint_y),
+                       DIM, center=True)
 
 
-def draw_overlay(canvas: pygame.Surface, title: str, subtitle: str) -> None:
-    box = pygame.Rect(BOARD_X + 5, BOARD_Y + BOARD_H // 2 - 30, BOARD_W - 10, 60)
+def draw_overlay(canvas: pygame.Surface, layout: Layout, title: str, subtitle: str) -> None:
+    left, top, width, height = layout.board_rect
+    box = pygame.Rect(left + 5, top + height // 2 - 30, width - 10, 60)
     draw_box(canvas, box)
     pixelfont.draw(canvas, title, (box.centerx, box.y + 20), WHITE, 2, center=True)
     pixelfont.draw(canvas, subtitle, (box.centerx, box.y + 42), DIM, center=True)
@@ -525,7 +654,8 @@ def draw_overlay(canvas: pygame.Surface, title: str, subtitle: str) -> None:
 async def flash_rows(screen: Screen, grid: Grid, rows: set[int], *stats: object) -> None:
     '''Blink completed rows a few times before they are cleared.'''
     for i in range(6):
-        draw_game(screen.canvas, grid, *stats, flash=rows if i % 2 == 0 else None)
+        draw_game(screen.canvas, screen.layout, grid, *stats,
+                  flash=rows if i % 2 == 0 else None)
         present(screen)
         await wait_ms(55)
 
@@ -538,6 +668,22 @@ def shift(piece: Piece, grid: Grid, columns: int, rows: int) -> None:
         try_move(piece, grid, dy=1)
 
 
+def apply_move(piece: Piece, grid: Grid, action: str) -> bool:
+    '''Apply a move ('left', 'right', 'rotate', 'down', 'drop'); True if the piece must lock.'''
+    if action == 'left':
+        try_move(piece, grid, dx=-1)
+    elif action == 'right':
+        try_move(piece, grid, dx=1)
+    elif action == 'rotate':
+        try_move(piece, grid, rotate=1)
+    elif action == 'down':
+        try_move(piece, grid, dy=1)
+    elif action == 'drop':
+        hard_drop(piece, grid)
+        return True
+    return False
+
+
 async def play(screen: Screen, top: int) -> GameResult:
     locked: dict = {}
     current_piece = new_piece()
@@ -547,58 +693,62 @@ async def play(screen: Screen, top: int) -> GameResult:
     score = lines = level = 0
     paused = False
     drag: Drag | None = None
+    held: str | None = None  # repeating button under the finger
+    held_since = held_fired = 0
 
     while True:
         elapsed = clock.tick(FPS)
+        now = pygame.time.get_ticks()
         grid = create_grid(locked)
         lock_now = False
         ended = False
 
         for event in pygame.event.get():
+            action = None
             if event.type == pygame.QUIT:
                 quit_game()
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 pos = to_canvas(event.pos)
-                action = button_at(GAME_BUTTONS, pos)
-                if action == 'pause':
-                    paused = not paused
-                elif action == 'end':
-                    ended = True
-                else:
-                    drag = start_drag(pos, pygame.time.get_ticks())
+                action = button_at(screen.layout.buttons, pos)
+                if action is None:
+                    drag = start_drag(pos, now)
+                elif action in REPEATING:
+                    held, held_since, held_fired = action, now, 0
             elif event.type == pygame.MOUSEMOTION and drag:
-                columns, rows = drag_steps(drag, to_canvas(event.pos), BLOCK)
+                columns, rows = drag_steps(drag, to_canvas(event.pos), screen.layout.block)
                 if not paused:
                     shift(current_piece, grid, columns, rows)
-            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1 and drag:
-                gesture = release_gesture(drag, to_canvas(event.pos), pygame.time.get_ticks())
-                drag = None
-                if paused:
-                    paused = gesture != 'tap'
-                elif gesture == 'tap':
-                    try_move(current_piece, grid, rotate=1)
-                elif gesture == 'flick_down':
-                    hard_drop(current_piece, grid)
-                    lock_now = True
-            if event.type != pygame.KEYDOWN:
-                continue
-            if event.key == pygame.K_p:
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                held = None
+                if drag:
+                    gesture = release_gesture(drag, to_canvas(event.pos), now)
+                    drag = None
+                    if paused:
+                        paused = gesture != 'tap'
+                    elif gesture == 'tap':
+                        action = 'rotate'
+                    elif gesture == 'flick_down':
+                        action = 'drop'
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_p:
+                    action = 'pause'
+                elif event.key == pygame.K_ESCAPE:
+                    action = 'end'
+                else:
+                    action = KEY_ACTIONS.get(event.key)
+
+            if action == 'pause':
                 paused = not paused
-            elif event.key == pygame.K_ESCAPE:
+            elif action == 'end':
                 ended = True
-            elif paused:
-                continue
-            elif event.key == pygame.K_LEFT:
-                try_move(current_piece, grid, dx=-1)
-            elif event.key == pygame.K_RIGHT:
-                try_move(current_piece, grid, dx=1)
-            elif event.key == pygame.K_UP:
-                try_move(current_piece, grid, rotate=1)
-            elif event.key == pygame.K_DOWN:
-                try_move(current_piece, grid, dy=1)
-            elif event.key == pygame.K_SPACE:
-                hard_drop(current_piece, grid)
-                lock_now = True
+            elif action and not paused:
+                lock_now = apply_move(current_piece, grid, action) or lock_now
+
+        if held and not paused:
+            due = repeats(now - held_since)
+            for _ in range(due - held_fired):
+                apply_move(current_piece, grid, held)
+            held_fired = due
 
         if not paused:
             fall_ms += elapsed
@@ -624,14 +774,17 @@ async def play(screen: Screen, top: int) -> GameResult:
             if y >= 0:
                 grid[y][x] = current_piece.color
 
-        draw_game(screen.canvas, grid, next_piece, score, lines, level, top, paused=paused)
+        layout = screen.layout
+        draw_game(screen.canvas, layout, grid, next_piece, score, lines, level, top,
+                  paused=paused)
         if paused:
-            draw_overlay(screen.canvas, 'PAUSED', 'TAP RESUME' if WEB else 'P RESUME  ESC END')
+            draw_overlay(screen.canvas, layout, 'PAUSED',
+                         'TAP RESUME' if WEB else 'P RESUME  ESC END')
         present(screen)
         await asyncio.sleep(0)
 
         if ended or check_lost(locked):
-            draw_overlay(screen.canvas, 'GAME OVER', f'{score} POINTS')
+            draw_overlay(screen.canvas, screen.layout, 'GAME OVER', f'{score} POINTS')
             present(screen)
             await wait_ms(1500)
             pygame.event.clear()
@@ -664,9 +817,9 @@ async def game_loop(screen: Screen) -> None:
 async def main() -> None:
     pygame.init()
     prepare_page()
-    window = pygame.display.set_mode(WINDOW_SIZE)
     pygame.display.set_caption('Tetris')
-    await game_loop(make_screen(window))
+    portrait = is_portrait() if WEB else '--portrait' in sys.argv
+    await game_loop(make_screen(pick_layout(portrait)))
 
 
 if __name__ == '__main__':
