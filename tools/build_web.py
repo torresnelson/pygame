@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / 'src'
 BUILD_DIR = ROOT / 'build' / 'web'
 SITE_DIR = ROOT / 'build' / 'site'
-SHARED = (SRC / 'shared' / 'pixelfont.py',)
+SHARED = tuple(SRC / 'shared' / name for name in ('pixelfont.py', 'touch.py', 'browser.py'))
 
 
 @dataclass(frozen=True)

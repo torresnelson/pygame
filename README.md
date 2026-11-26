@@ -49,16 +49,30 @@ Controls:
   faster. A top-10 table with names lives in
   `src/tetris/highscores.json` (ignored by git); an old
   `scores.txt` best score is imported once as `LEGACY`.
+  On a touch screen: tap rotates, drag sideways moves, drag down
+  soft drops, flick down hard drops, and the PAUSE / END buttons
+  replace `p` / `esc`. Names are typed or tapped on an on-screen
+  keyboard. On a phone held upright tetris switches to a portrait
+  layout: a bigger board with `<` `ROT` `>` `DOWN` `DROP` thumb
+  buttons under it (left, right and down repeat while held); it
+  follows the phone when it is turned, even mid-game. Run
+  `python src/tetris/tetris.py --portrait` to see that layout on
+  desktop.
 - game of life: the start screen lets you pick a pattern (glider,
   lightweight spaceship, blinker, toad, beacon, pulsar,
   pentadecathlon, Gosper glider gun, R-pentomino, diehard, acorn,
   random soup or an empty board) with up/down + enter or a click.
   On the board: `space` runs/pauses, `n` steps once, click toggles
   cells while paused, `+` `-` change speed, `r` reloads the
-  pattern, `c` clears, `esc` goes back to the picker.
-- sand simulator: left mouse paints, right mouse erases, `1` sand,
-  `2` water, `3` stone, mouse wheel or `[` `]` brush size, `space`
-  pause, `c` clear, `esc` back to the menu. Sand accelerates under
+  pattern, `c` clears, `esc` goes back to the picker. The button
+  bar under the board does the same with a click or a tap; on a
+  touch screen the first tap in the picker previews a pattern and
+  the second one loads it.
+- sand simulator: left mouse (or a finger) paints, right mouse
+  erases, `1` sand, `2` water, `3` stone, `4` eraser, mouse wheel
+  or `[` `]` brush size, `space` pause, `c` clear, `esc` back to
+  the menu; the toolbar under the world does the same with a tap.
+  Sand accelerates under
   gravity, piles into slopes and sinks through water; water flows
   and levels out; stone stays put.
 
@@ -70,7 +84,9 @@ covered by the tests in `tests/`.
 
 All three games also run in the browser through
 [pygbag](https://pypi.org/project/pygbag/) (pygame compiled to
-WebAssembly), using the same code as the desktop versions:
+WebAssembly), using the same code as the desktop versions, with
+touch controls for phones (tetris fits a phone either way up; the
+sand simulator is wide, so it fills more of a phone held sideways):
 
 - https://torresnelson.github.io/pygame/ (landing page)
 - https://torresnelson.github.io/pygame/gameoflife/
@@ -88,6 +104,10 @@ Build locally:
 Every push to `master` builds the site and publishes it to GitHub
 Pages (`.github/workflows/pages.yml`). The first visit downloads the
 Python runtime, so a game takes a few seconds to start.
+
+To test a full build locally, use `--serve`, or open the static site
+via `127.0.0.1` rather than `localhost`: on `localhost` pygbag fetches
+pygame from its own dev server.
 
 ## Development
 
