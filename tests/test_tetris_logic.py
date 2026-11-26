@@ -16,7 +16,9 @@ from tetris_logic import (
     check_lost,
     clear_rows,
     create_grid,
+    fall_interval,
     hard_drop,
+    level_for_lines,
     lock_piece,
     new_piece,
     piece_positions,
@@ -76,9 +78,25 @@ def test_clear_four_rows_tetris() -> None:
     assert remaining == {(2, 19): R}
 
 
-@pytest.mark.parametrize(('lines', 'points'), [(0, 0), (1, 10), (4, 40)])
-def test_score_for_lines(lines: int, points: int) -> None:
-    assert score_for_lines(lines) == points
+@pytest.mark.parametrize(
+    ('lines', 'level', 'points'),
+    [(0, 0, 0), (1, 0, 40), (2, 0, 100), (3, 0, 300), (4, 0, 1200), (1, 2, 120), (4, 9, 12000)],
+)
+def test_score_for_lines(lines: int, level: int, points: int) -> None:
+    assert score_for_lines(lines, level) == points
+
+
+@pytest.mark.parametrize(('total', 'level'), [(0, 0), (9, 0), (10, 1), (25, 2), (100, 10)])
+def test_level_for_lines(total: int, level: int) -> None:
+    assert level_for_lines(total) == level
+
+
+def test_fall_interval_speeds_up_and_is_capped() -> None:
+    intervals = [fall_interval(level) for level in range(40)]
+    assert intervals[0] == pytest.approx(0.5)
+    assert all(a >= b for a, b in zip(intervals, intervals[1:], strict=False))
+    assert intervals[1] < intervals[0]
+    assert intervals[-1] == pytest.approx(0.05)
 
 
 def test_valid_space_rejects_walls_floor_and_blocks() -> None:

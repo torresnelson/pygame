@@ -40,9 +40,13 @@ project's root or anywhere else):
 
 Controls:
 
-- tetris: arrows move/rotate, space hard drops. The best score is
-  stored in `src/tetris/scores.txt` (ignored by git, created on
-  first game over).
+- tetris: the main menu has play, high scores and quit. In game,
+  arrows move/rotate, space hard drops, `p` pauses, `esc` ends the
+  game. Clearing 1/2/3/4 lines at once scores 40/100/300/1200
+  times (level + 1); every 10 lines is a new level and pieces fall
+  faster. A top-10 table with names lives in
+  `src/tetris/highscores.json` (ignored by git); an old
+  `scores.txt` best score is imported once as `LEGACY`.
 - game of life: the start screen lets you pick a pattern (glider,
   lightweight spaceship, blinker, toad, beacon, pulsar,
   pentadecathlon, Gosper glider gun, R-pentomino, diehard, acorn,

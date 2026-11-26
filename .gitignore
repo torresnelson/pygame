@@ -4,3 +4,4 @@ __pycache__/
 .ruff_cache/
 *.pyc
 src/tetris/scores.txt
+src/tetris/highscores.json

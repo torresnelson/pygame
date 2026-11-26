@@ -15,7 +15,12 @@ Shape = list[list[str]]
 ROWS = 20
 COLUMNS = 10
 EMPTY: Color = (0, 0, 0)
-POINTS_PER_LINE = 10
+# Points for clearing 1, 2, 3 or 4 lines at once, multiplied by (level + 1).
+LINE_POINTS = (0, 40, 100, 300, 1200)
+LINES_PER_LEVEL = 10
+BASE_FALL_S = 0.5
+MIN_FALL_S = 0.05
+FALL_STEP = 0.85
 
 RED: Color = (255, 0, 0)
 GREEN: Color = (0, 255, 0)
@@ -222,5 +227,15 @@ def clear_rows(locked: dict[Pos, Color]) -> tuple[dict[Pos, Color], int]:
     return remaining, len(full)
 
 
-def score_for_lines(lines: int) -> int:
-    return lines * POINTS_PER_LINE
+def score_for_lines(lines: int, level: int = 0) -> int:
+    '''Classic scoring: multi-line clears are worth more, scaled by level.'''
+    return LINE_POINTS[min(lines, 4)] * (level + 1)
+
+
+def level_for_lines(total_lines: int) -> int:
+    return total_lines // LINES_PER_LEVEL
+
+
+def fall_interval(level: int) -> float:
+    '''Seconds between automatic drops; pieces fall faster every level.'''
+    return max(MIN_FALL_S, BASE_FALL_S * FALL_STEP**level)
