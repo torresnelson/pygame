@@ -89,28 +89,36 @@ def glyph_pixels(char: str) -> list[tuple[int, int]]:
 
 
 @cache
-def render(text: str, color: tuple, scale: int = 1, shadow: tuple | None = None) -> pygame.Surface:
-    '''Render `text` to a transparent surface; `shadow` adds a 1-pixel drop shadow.'''
-    text = normalise(text)
-    width, height = text_size(text, scale)
-    offset = scale if shadow else 0
-    surface = pygame.Surface((max(1, width + offset), height + offset), pygame.SRCALPHA)
+def pixel_rects(text: str, scale: int = 1) -> tuple[tuple[int, int, int, int], ...]:
+    '''Rectangles (relative to the text's top-left) that make up `text`.'''
     advance = (GLYPH_WIDTH + SPACING) * scale
-    layers = ([(shadow, offset)] if shadow else []) + [(color, 0)]
-    for layer_color, shift in layers:
-        for i, char in enumerate(text):
-            for x, y in glyph_pixels(char):
-                rect = (i * advance + x * scale + shift, y * scale + shift, scale, scale)
-                surface.fill(layer_color, rect)
-    return surface
+    return tuple(
+        (i * advance + x * scale, y * scale, scale, scale)
+        for i, char in enumerate(normalise(text))
+        for x, y in glyph_pixels(char)
+    )
 
 
 def draw(surface: pygame.Surface, text: str, pos: tuple[float, float], color: tuple,
          scale: int = 1, shadow: tuple | None = None, center: bool = False) -> pygame.Rect:
-    '''Blit `text` at `pos` (top-left, or centre when `center` is true).'''
-    image = render(text, color, scale, shadow)
+    '''Draw `text` straight onto `surface` at `pos` (top-left, or centre).
+
+    Glyph pixels are filled directly on the target (no intermediate
+    per-pixel-alpha surface), so the result does not depend on the display's
+    pixel format. `shadow` adds a drop shadow offset by one font pixel.
+    '''
+    text = normalise(text)
+    width, height = text_size(text, scale)
     x, y = pos
     if center:
-        x -= image.get_width() // 2
-        y -= image.get_height() // 2
-    return surface.blit(image, (int(x), int(y)))
+        x -= width // 2
+        y -= height // 2
+    x, y = int(x), int(y)
+    rects = pixel_rects(text, scale)
+    if shadow:
+        for rx, ry, w, h in rects:
+            surface.fill(shadow, (x + rx + scale, y + ry + scale, w, h))
+    for rx, ry, w, h in rects:
+        surface.fill(color, (x + rx, y + ry, w, h))
+    offset = scale if shadow else 0
+    return pygame.Rect(x, y, width + offset, height + offset)

@@ -68,6 +68,8 @@ GOLD: Color = (248, 184, 0)
 SILVER: Color = (188, 188, 188)
 BRONZE: Color = (200, 108, 40)
 RANK_COLORS = (GOLD, SILVER, BRONZE)
+WHITE_MASK: Color = (255, 255, 255)
+SCANLINE_MASK: Color = (190, 190, 190)
 
 MENU_OPTIONS = ('PLAY', 'HIGH SCORES', 'QUIT')
 MENU_BOX = pygame.Rect(105, 150, 190, 92)
@@ -89,16 +91,18 @@ class Screen:
 
 
 def make_screen(window: pygame.Surface) -> Screen:
-    scanlines = pygame.Surface(WINDOW_SIZE, pygame.SRCALPHA)
+    # Multiply mask (no per-pixel alpha): white keeps colours, grey darkens a row.
+    scanlines = pygame.Surface(WINDOW_SIZE)
+    scanlines.fill(WHITE_MASK)
     for y in range(1, WINDOW_SIZE[1], SCALE):
-        scanlines.fill((0, 0, 0, 70), (0, y, WINDOW_SIZE[0], 1))
+        scanlines.fill(SCANLINE_MASK, (0, y, WINDOW_SIZE[0], 1))
     return Screen(window, pygame.Surface((WIDTH, HEIGHT)), scanlines)
 
 
 def present(screen: Screen) -> None:
     '''Scale the low-res canvas up with hard pixel edges and add scanlines.'''
     screen.window.blit(pygame.transform.scale(screen.canvas, WINDOW_SIZE), (0, 0))
-    screen.window.blit(screen.scanlines, (0, 0))
+    screen.window.blit(screen.scanlines, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
     pygame.display.update()
 
 
@@ -156,13 +160,13 @@ def draw_box(surface: pygame.Surface, rect: pygame.Rect | tuple, title: str | No
 def draw_title(surface: pygame.Surface, center_y: int, scale: int) -> None:
     '''"TETRIS" with each letter in a different piece colour and a hard shadow.'''
     word = 'TETRIS'
-    width, _ = pixelfont.text_size(word, scale)
+    width, height = pixelfont.text_size(word, scale)
     x = (WIDTH - width) // 2
     advance = (pixelfont.GLYPH_WIDTH + pixelfont.SPACING) * scale
     for i, letter in enumerate(word):
         color = SHAPE_COLORS[i % len(SHAPE_COLORS)]
-        image = pixelfont.render(letter, color, scale, shadow=shade(color, -0.7))
-        surface.blit(image, (x + i * advance, center_y - image.get_height() // 2))
+        pos = (x + i * advance, center_y - height // 2)
+        pixelfont.draw(surface, letter, pos, color, scale, shadow=shade(color, -0.7))
 
 
 # -- menu --------------------------------------------------------------------

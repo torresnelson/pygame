@@ -7,9 +7,10 @@ from pixelfont import (
     GLYPH_HEIGHT,
     GLYPH_WIDTH,
     GLYPHS,
+    draw,
     glyph_pixels,
     normalise,
-    render,
+    pixel_rects,
     text_size,
 )
 
@@ -43,20 +44,34 @@ def test_text_size(text: str, scale: int, size: tuple[int, int]) -> None:
     assert text_size(text, scale) == size
 
 
-def test_render_draws_glyph_pixels_at_scale() -> None:
-    white = (255, 255, 255)
-    image = render('I', white, 2)
-    assert image.get_size() == (10, 14)
-    on = {(x, y) for x, y in glyph_pixels('I')}
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+
+
+@pytest.mark.parametrize('depth', [16, 24, 32])
+def test_draw_fills_glyph_pixels_on_any_surface_format(depth: int) -> None:
+    # Plain surfaces without per-pixel alpha, like a real display canvas.
+    surface = pygame.Surface((40, 30), depth=depth)
+    surface.fill(BLACK)
+    rect = draw(surface, 'I', (3, 4), WHITE, 2)
+    assert rect == pygame.Rect(3, 4, 10, 14)
+    on = set(glyph_pixels('I'))
     for y in range(GLYPH_HEIGHT):
         for x in range(GLYPH_WIDTH):
-            alpha = image.get_at((x * 2 + 1, y * 2 + 1)).a
-            assert (alpha > 0) == ((x, y) in on)
+            lit = surface.get_at((3 + x * 2 + 1, 4 + y * 2 + 1))[:3] != BLACK
+            assert lit == ((x, y) in on)
 
 
-def test_render_shadow_adds_offset() -> None:
-    plain = render('HI', (255, 255, 255), 2)
-    shadowed = render('HI', (255, 255, 255), 2, shadow=(0, 0, 0))
-    assert shadowed.get_width() == plain.get_width() + 2
-    assert shadowed.get_height() == plain.get_height() + 2
-    assert isinstance(shadowed, pygame.Surface)
+def test_draw_center_and_shadow() -> None:
+    surface = pygame.Surface((40, 30))
+    surface.fill(BLACK)
+    rect = draw(surface, 'HI', (20, 15), WHITE, 1, shadow=(100, 0, 0), center=True)
+    assert rect == pygame.Rect(15, 12, 12, 8)
+    # 'H' top-left pixel is lit; the shadow sits one pixel down-right of the last row.
+    assert surface.get_at((15, 12))[:3] == WHITE
+    assert surface.get_at((16, 19))[:3] == (100, 0, 0)
+
+
+def test_pixel_rects_count_matches_glyphs() -> None:
+    assert len(pixel_rects('HI', 3)) == len(glyph_pixels('H')) + len(glyph_pixels('I'))
+    assert pixel_rects('', 1) == ()
