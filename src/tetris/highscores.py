@@ -51,9 +51,14 @@ def best(entries: list[Entry]) -> int:
     return max((entry.score for entry in entries), default=0)
 
 
-def from_json(text: str) -> list[Entry]:
-    '''Parse a saved table; raises ValueError or TypeError if it is malformed.'''
-    return ranked([Entry(**item) for item in json.loads(text)])
+def from_json(text: str | None) -> list[Entry]:
+    '''Parse a stored table; missing or malformed data gives an empty table.'''
+    if not text:
+        return []
+    try:
+        return ranked([Entry(**item) for item in json.loads(text)])
+    except (ValueError, TypeError):
+        return []
 
 
 def to_json(entries: list[Entry]) -> str:
@@ -66,8 +71,6 @@ def load(path: Path = HIGHSCORES_FILE, legacy: Path = LEGACY_FILE) -> list[Entry
         return from_json(path.read_text())
     except FileNotFoundError:
         pass
-    except (ValueError, TypeError):
-        return []
     try:
         legacy_score = int(legacy.read_text().strip() or 0)
     except (FileNotFoundError, ValueError):

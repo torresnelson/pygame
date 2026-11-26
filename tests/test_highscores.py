@@ -8,12 +8,14 @@ from highscores import (
     Entry,
     best,
     clean_name,
+    from_json,
     insert,
     load,
     new_entry,
     qualifies,
     ranked,
     save,
+    to_json,
 )
 
 
@@ -93,15 +95,10 @@ def test_default_paths_live_next_to_module() -> None:
     assert highscores.LEGACY_FILE.name == 'scores.txt'
 
 
-def test_json_round_trip() -> None:
-    entries = [Entry('ANA', 50, 4, 0, '2026-11-26'), Entry('BOB', 90)]
-    assert highscores.from_json(highscores.to_json(entries)) == ranked(entries)
-
-
-def test_from_json_rejects_garbage() -> None:
-    for text in ('not json', '[{"nope": 1}]'):
-        try:
-            highscores.from_json(text)
-        except (ValueError, TypeError):
-            continue
-        raise AssertionError(f'accepted {text!r}')
+def test_json_roundtrip_and_bad_input() -> None:
+    entries = [Entry('b', 40), Entry('a', 1200, 12, 1, '2026-11-26')]
+    assert from_json(to_json(entries)) == ranked(entries)
+    assert from_json(None) == []
+    assert from_json('') == []
+    assert from_json('{not json') == []
+    assert from_json('[{"unexpected": 1}]') == []

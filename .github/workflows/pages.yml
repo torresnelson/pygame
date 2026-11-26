@@ -42,6 +42,7 @@ jobs:
       - name: Build web versions
         run: python tools/build_web.py
 
+      # Site layout: /gameoflife/, /tetris/, /sandsimulator/ and a landing page at /.
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build/site

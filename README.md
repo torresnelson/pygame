@@ -80,29 +80,34 @@ Game rules live in pygame-free modules (`tetris_logic.py`,
 `life.py` + `patterns.py`, and the sand engine `world.py` + `materials.py`)
 covered by the tests in `tests/`.
 
-## Playing in the browser (phones too)
+## Play in the browser
 
 All three games also run in the browser through
 [pygbag](https://pypi.org/project/pygbag/) (pygame compiled to
-WebAssembly), using the same code as the desktop version. Touch
-controls make them playable on a phone; in the browser tetris keeps
-its high scores in `localStorage`.
+WebAssembly), using the same code as the desktop versions, with
+touch controls for phones (tetris fits a phone either way up; the
+sand simulator is wide, so it fills more of a phone held sideways):
+
+- https://torresnelson.github.io/pygame/ (landing page)
+- https://torresnelson.github.io/pygame/gameoflife/
+- https://torresnelson.github.io/pygame/tetris/ (high scores are kept
+  in the browser's local storage)
+- https://torresnelson.github.io/pygame/sandsimulator/
+
+Build locally:
 
     pip install -e '.[web]'
-    python tools/build_web.py                # every game + landing page in build/site
-    python tools/build_web.py tetris life    # only some games
-    python tools/build_web.py sand --serve   # local test server on http://localhost:8000
+    python tools/build_web.py                    # every game, site staged in build/site
+    python tools/build_web.py tetris             # only some games
+    python tools/build_web.py --serve tetris     # local test server on http://localhost:8000
 
 Every push to `master` builds the site and publishes it to GitHub
-Pages (`.github/workflows/web.yml`): a landing page links to
-`tetris/`, `life/` and `sand/`. The first visit downloads the
-Python runtime, so it takes a few seconds to start. Tetris fits a
-phone either way up; the sand simulator is wide, so it fills more of
-a phone held in landscape.
+Pages (`.github/workflows/pages.yml`). The first visit downloads the
+Python runtime, so a game takes a few seconds to start.
 
-Note: a plain static server on `localhost` does not work for a
-full build, because pygbag then fetches pygame from its own dev
-server; use `--serve`, or open the static site via `127.0.0.1`.
+To test a full build locally, use `--serve`, or open the static site
+via `127.0.0.1` rather than `localhost`: on `localhost` pygbag fetches
+pygame from its own dev server.
 
 ## Development
 

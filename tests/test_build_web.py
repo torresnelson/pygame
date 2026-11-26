@@ -2,53 +2,41 @@ import ast
 from pathlib import Path
 
 import pytest
-from build_web import (
-    GAMES,
-    Game,
-    app_dir,
-    assemble,
-    build_site,
-    landing_page,
-    main_script,
-    pygbag_command,
-)
+from build_web import GAMES, GAMES_BY_PATH, assemble, landing_page, main_py, pygbag_command, select
+from build_web import stage_site as stage
 
-STDLIB_OR_PYGAME = {'asyncio', 'sys', 'pathlib', 'random', 'dataclasses', 'functools',
-                    'collections', 'json', 'datetime', 'enum', 'platform', 'pygame'}
+STDLIB_OR_PYGAME = {
+    'asyncio', 'sys', 'pathlib', 'random', 'dataclasses', 'functools', 'collections',
+    'enum', 'json', 'datetime', 'platform', 'pygame',
+}
 
 
-@pytest.mark.parametrize('game', GAMES, ids=lambda game: game.slug)
-def test_sources_exist(game: Game) -> None:
+def test_site_paths() -> None:
+    assert [game.path for game in GAMES] == ['gameoflife', 'tetris', 'sandsimulator']
+
+
+@pytest.mark.parametrize('game', GAMES, ids=lambda game: game.path)
+def test_sources_exist_and_include_entry_module(game) -> None:
     assert all(source.is_file() for source in game.sources)
+    assert f'{game.module}.py' in {source.name for source in game.sources}
 
 
-@pytest.mark.parametrize('game', GAMES, ids=lambda game: game.slug)
-def test_assemble_copies_sources_and_writes_main(game: Game, tmp_path: Path) -> None:
-    app = tmp_path / 'app'
+@pytest.mark.parametrize('game', GAMES, ids=lambda game: game.path)
+def test_assemble_copies_sources_and_writes_main(game, tmp_path: Path) -> None:
+    app = tmp_path / game.path
     (app / 'stale').mkdir(parents=True)
     files = assemble(game, app)
-    names = sorted(path.name for path in app.iterdir())
-    assert names == sorted([*(s.name for s in game.sources), 'main.py'])
+    assert sorted(p.name for p in app.iterdir()) == sorted(
+        [*(s.name for s in game.sources), 'main.py']
+    )
     assert len(files) == len(game.sources) + 1
-    assert (app / 'main.py').read_text() == main_script(game.module)
+    assert (app / 'main.py').read_text() == main_py(game)
 
 
-@pytest.mark.parametrize('game', GAMES, ids=lambda game: game.slug)
-def test_main_imports_pygame_before_the_game(game: Game) -> None:
-    '''pygbag only sets up pygame when main.py itself imports it.'''
-    imports = [
-        alias.name
-        for node in ast.parse(main_script(game.module)).body
-        if isinstance(node, ast.Import)
-        for alias in node.names
-    ]
-    assert imports.index('pygame') < imports.index(game.module)
-
-
-@pytest.mark.parametrize('game', GAMES, ids=lambda game: game.slug)
-def test_assembled_app_imports_resolve_within_the_folder(game: Game, tmp_path: Path) -> None:
+@pytest.mark.parametrize('game', GAMES, ids=lambda game: game.path)
+def test_assembled_app_imports_resolve_within_the_folder(game, tmp_path: Path) -> None:
     '''Every local import in the app must be satisfied by a file in the folder.'''
-    app = tmp_path / 'app'
+    app = tmp_path / game.path
     assemble(game, app)
     local = {path.stem for path in app.glob('*.py')}
     for path in app.glob('*.py'):
@@ -62,33 +50,66 @@ def test_assembled_app_imports_resolve_within_the_folder(game: Game, tmp_path: P
                 assert name in local | STDLIB_OR_PYGAME, f'{path.name} imports {name}'
 
 
-def test_slugs_are_unique() -> None:
-    assert len({game.slug for game in GAMES}) == len(GAMES)
+@pytest.mark.parametrize('game', GAMES, ids=lambda game: game.path)
+def test_main_imports_pygame_before_the_game_and_runs_its_main(game) -> None:
+    '''pygbag only sets up pygame when main.py itself imports it.'''
+    tree = ast.parse(main_py(game))
+    imports = [alias.name for node in tree.body if isinstance(node, ast.Import)
+               for alias in node.names]
+    assert imports.index('pygame') < imports.index(game.module)
+    assert f'asyncio.run({game.module}.main())' in main_py(game)
+
+
+@pytest.mark.parametrize('game', GAMES, ids=lambda game: game.path)
+def test_entry_module_has_async_main(game) -> None:
+    entry = next(s for s in game.sources if s.name == f'{game.module}.py')
+    tree = ast.parse(entry.read_text())
+    assert any(isinstance(node, ast.AsyncFunctionDef) and node.name == 'main'
+               for node in tree.body)
+
+
+def test_stage_site_layout_and_landing_page(tmp_path: Path) -> None:
+    build = tmp_path / 'build'
+    for game in GAMES:
+        web = build / game.path / 'build' / 'web'
+        web.mkdir(parents=True)
+        (web / 'index.html').write_text(game.title)
+        (web / f'{game.path}.apk').write_bytes(b'apk')
+    site = tmp_path / 'site'
+    (site / 'stale').mkdir(parents=True)
+
+    staged = stage(GAMES, build, site)
+
+    assert [p.name for p in staged] == [game.path for game in GAMES]
+    assert sorted(p.name for p in site.iterdir()) == sorted(
+        ['index.html', *(game.path for game in GAMES)]
+    )
+    for game in GAMES:
+        assert (site / game.path / 'index.html').read_text() == game.title
+    landing = (site / 'index.html').read_text()
+    for game in GAMES:
+        assert f'href="{game.path}/"' in landing
+        assert game.title in landing
+
+
+def test_landing_page_escapes_text() -> None:
+    from build_web import Game
+
+    page = landing_page((Game('x', 'x', 'A <b>', 'B & C', ()),))
+    assert 'A &lt;b&gt;' in page and 'B &amp; C' in page
+
+
+def test_select() -> None:
+    assert select([]) == GAMES
+    assert select(['tetris']) == (GAMES_BY_PATH['tetris'],)
+    with pytest.raises(SystemExit):
+        select(['pong'])
 
 
 def test_pygbag_command() -> None:
-    game = GAMES[0]
-    build = pygbag_command(game, Path('/x/app'))
+    game = GAMES_BY_PATH['tetris']
+    build = pygbag_command(game, Path('/x/tetris'))
     assert build[1:4] == ['-m', 'pygbag', '--build']
-    assert build[-1] == '/x/app'
-    assert game.title in build
-    assert '--build' not in pygbag_command(game, Path('/x/app'), serve=True)
-
-
-def test_landing_page_links_every_game() -> None:
-    page = landing_page(GAMES)
-    for game in GAMES:
-        assert f'href="{game.slug}/"' in page
-    assert 'name="viewport"' in page
-
-
-def test_build_site_collects_each_game(tmp_path: Path) -> None:
-    build_dir, site_dir = tmp_path / 'build', tmp_path / 'site'
-    for game in GAMES:
-        web = app_dir(game, build_dir) / 'build' / 'web'
-        web.mkdir(parents=True)
-        (web / 'index.html').write_text(game.title)
-    build_site(GAMES, build_dir, site_dir)
-    for game in GAMES:
-        assert (site_dir / game.slug / 'index.html').read_text() == game.title
-    assert (site_dir / 'index.html').is_file()
+    assert build[-1] == '/x/tetris'
+    assert 'Tetris' in build
+    assert '--build' not in pygbag_command(game, Path('/x/tetris'), serve=True)

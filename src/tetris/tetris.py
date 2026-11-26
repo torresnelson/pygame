@@ -178,7 +178,7 @@ KEY_ROWS = ('ABCDEFGHIJ', 'KLMNOPQRST', 'UVWXYZ0123', '456789')
 KEY_W, KEY_H, KEY_GAP = 34, 22, 4
 KEYBOARD_X, KEYBOARD_Y = 12, 190
 
-STORAGE_KEY = 'tetris-highscores'
+STORAGE_KEY = 'tetris.highscores'  # keep: scores already saved under this key
 
 
 @dataclass(frozen=True)
@@ -284,11 +284,7 @@ async def wait_ms(ms: int) -> None:
 def load_scores() -> list[Entry]:
     if not WEB:
         return load()
-    text = load_text(STORAGE_KEY)
-    try:
-        return from_json(text) if text else []
-    except (ValueError, TypeError):
-        return []
+    return from_json(load_text(STORAGE_KEY))
 
 
 def save_scores(entries: list[Entry]) -> None:

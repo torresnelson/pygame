@@ -11,7 +11,6 @@ browser through pygbag (see tools/build_web.py).
 
 import asyncio
 import sys
-from functools import cache
 from pathlib import Path
 
 # Shared modules (pixel font, touch) live in src/shared; the web build copies them alongside.
@@ -20,7 +19,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / 'shared'))
 import pixelfont
 import pygame
 from browser import WEB, prepare_page
-from materials import Material, palette
+from materials import PROPS, Material, palette
 from touch import Button, button_at, button_row
 from world import World
 
@@ -61,14 +60,18 @@ TOOLBAR = button_row(
 )
 
 BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-RED = (255, 0, 0)
+WHITE = (252, 252, 252)
+RED = (228, 52, 32)
+DIM = (150, 150, 170)
+GOLD = (248, 184, 0)
+MUTED = (130, 130, 150)
 BACKGROUND = (12, 12, 18)
 BAR_BACKGROUND = (24, 24, 32)
 BUTTON = (40, 40, 54)
 BUTTON_ACTIVE = (70, 70, 100)
-GOLD = (248, 184, 0)
-MUTED = (130, 130, 150)
+SAND = PROPS[Material.SAND].color
+HELP = ('1 SAND  2 WATER  3 STONE  4 ERASE  LMB PAINT  RMB ERASE  WHEEL/[] BRUSH  '
+        'SPC PAUSE  C CLEAR')
 
 # Pre-rendered RGB bytes per (material, shade); empty cells use BACKGROUND.
 PIXELS: list[list[bytes]] = [
@@ -77,14 +80,17 @@ PIXELS: list[list[bytes]] = [
 ]
 
 
-@cache
-def get_font(size: int) -> pygame.font.Font:
-    return pygame.font.SysFont('monospace', size, bold=True)
+def tool_name(tool: Material) -> str:
+    return 'eraser' if tool == Material.EMPTY else tool.name.lower()
 
 
-def draw_text(surface: pygame.Surface, text: str, size: int, color: tuple, y: float) -> None:
-    label = get_font(size).render(text, True, color)
-    surface.blit(label, (S_WIDTH / 2 - label.get_width() / 2, y - label.get_height() / 2))
+def status_text(tool: Material, brush: int, fps: float, paused: bool) -> str:
+    paused_flag = '  PAUSED' if paused else ''
+    return f'{tool_name(tool).upper()}  BRUSH {brush}  {fps:.0f} FPS{paused_flag}'
+
+
+def blink(period_ms: int = 500) -> bool:
+    return pygame.time.get_ticks() // period_ms % 2 == 0
 
 
 def to_cell(pixel: tuple[int, int]) -> tuple[int, int]:
@@ -93,10 +99,6 @@ def to_cell(pixel: tuple[int, int]) -> tuple[int, int]:
 
 def in_world(pixel: tuple[int, int]) -> bool:
     return 0 <= pixel[1] < S_HEIGHT
-
-
-def tool_name(tool: Material) -> str:
-    return 'eraser' if tool == Material.EMPTY else tool.name.lower()
 
 
 def resize_brush(brush: int, action: str) -> int:
@@ -117,7 +119,9 @@ def draw_button(win: pygame.Surface, button: Button, label: str, active: bool) -
 def draw(win: pygame.Surface, world: World, status: str, tool: Material, paused: bool) -> None:
     frame = pygame.image.frombuffer(render(world), (world.width, world.height), 'RGB')
     win.blit(pygame.transform.scale(frame, (S_WIDTH, S_HEIGHT)), (0, 0))
-    win.blit(get_font(14).render(status, True, WHITE), (8, 6))
+    pixelfont.draw(win, status, (8, 8), WHITE, 2, shadow=BLACK)
+    if not WEB:
+        pixelfont.draw(win, HELP, (8, 28), DIM, shadow=BLACK)
     win.fill(BAR_BACKGROUND, (0, S_HEIGHT, S_WIDTH, BAR_HEIGHT))
     for button in TOOLBAR:
         active = TOOLS.get(button.action) == tool or (button.action == 'pause' and paused)
@@ -127,14 +131,14 @@ def draw(win: pygame.Surface, world: World, status: str, tool: Material, paused:
 
 
 def quit_game() -> None:
-    '''Close the game on desktop; a browser tab has nothing to quit to.'''
+    '''Quit on desktop; in the browser there is nothing to quit to.'''
     if WEB:
         return
     pygame.quit()
     sys.exit()
 
 
-async def play(win: pygame.Surface) -> None:
+async def sandbox(win: pygame.Surface) -> None:
     '''Run the sandbox until the player goes back to the menu.'''
     clock = pygame.time.Clock()
     world = World(COLUMNS, ROWS)
@@ -182,30 +186,35 @@ async def play(win: pygame.Surface) -> None:
         if not paused:
             world.step()
 
-        status = (
-            f'{tool_name(tool)}  brush {brush}  {clock.get_fps():.0f} fps'
-            f'{"  [paused]" if paused else ""}'
-        )
-        if not WEB:
-            status += '  |  1 sand 2 water 3 stone 4 erase, rmb erase'
-        draw(win, world, status, tool, paused)
+        draw(win, world, status_text(tool, brush, clock.get_fps(), paused), tool, paused)
         clock.tick(FPS)
         await asyncio.sleep(0)
 
 
+def draw_menu(win: pygame.Surface) -> None:
+    win.fill(BLACK)
+    pixelfont.draw(win, 'SAND', (S_WIDTH // 2, 180), SAND, 10, shadow=(90, 70, 30), center=True)
+    pixelfont.draw(win, 'SIMULATOR', (S_WIDTH // 2, 270), SAND, 6, shadow=(90, 70, 30),
+                   center=True)
+    if blink():
+        prompt = 'TAP TO START' if WEB else 'PRESS ANY KEY'
+        pixelfont.draw(win, prompt, (S_WIDTH // 2, 380), WHITE, 3, center=True)
+    pixelfont.draw(win, 'TITOREBOOT INC', (S_WIDTH // 2, 3 * S_HEIGHT // 4 + 40), RED, 2,
+                   center=True)
+    pygame.display.update()
+
+
 async def main_menu(win: pygame.Surface) -> None:
     clock = pygame.time.Clock()
-    prompt = 'Tap to start.' if WEB else 'Press any key to continue.'
     while True:
-        win.fill(BLACK)
-        draw_text(win, prompt, 30, WHITE, WINDOW_SIZE[1] / 2)
-        draw_text(win, 'titoreboot inc', 15, RED, 3 * WINDOW_SIZE[1] / 4)
-        pygame.display.update()
         events = pygame.event.get()
         if any(event.type == pygame.QUIT for event in events):
             quit_game()
-        if any(event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN) for event in events):
-            await play(win)
+        if any(event.type == pygame.KEYDOWN
+               or (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1)
+               for event in events):
+            await sandbox(win)
+        draw_menu(win)
         clock.tick(FPS)
         await asyncio.sleep(0)
 

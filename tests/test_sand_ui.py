@@ -1,7 +1,9 @@
+import pixelfont
 from materials import Material
 
 from sand_simulator import (
     FILL,
+    HELP,
     KEY_ACTIONS,
     MAX_BRUSH,
     MIN_BRUSH,
@@ -11,8 +13,22 @@ from sand_simulator import (
     WINDOW_SIZE,
     in_world,
     resize_brush,
+    status_text,
     tool_name,
 )
+
+
+def test_status_text() -> None:
+    assert status_text(Material.SAND, 3, 59.6, False) == 'SAND  BRUSH 3  60 FPS'
+    assert status_text(Material.WATER, 0, 30, True).endswith('PAUSED')
+    assert status_text(Material.EMPTY, 2, 60, False).startswith('ERASER')
+
+
+def test_hud_text_only_uses_characters_the_pixel_font_can_draw() -> None:
+    texts = [HELP, status_text(Material.STONE, 12, 60, True), 'TAP TO START', 'PLAY']
+    texts += [button.label for button in TOOLBAR]
+    for text in texts:
+        assert set(text.upper()) <= pixelfont.CHARSET, text
 
 
 def test_toolbar_sits_below_the_world_inside_the_window() -> None:

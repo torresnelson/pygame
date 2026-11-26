@@ -1,63 +1,65 @@
-'''Build the browser versions of the games with pygbag.
+'''Build the browser versions of the games with pygbag and stage one static site.
 
 pygbag packages a folder whose entry point is `main.py`. For each game this
-script assembles that folder from the existing sources (no code is
-duplicated in git) and runs pygbag on it. A full build then gathers every
-game under `build/site/<slug>/` next to a small landing page, ready for any
-static host (GitHub Pages in CI).
+script assembles such a folder from the existing sources (no code is
+duplicated in git) under `build/web/<app>/`, runs pygbag, then stages the
+publishable site in `build/site/`:
+
+    build/site/index.html          landing page linking every game
+    build/site/gameoflife/         Game of Life
+    build/site/tetris/             Tetris
+    build/site/sandsimulator/      Sand simulator
 
 Usage:
-    python tools/build_web.py                    # build every game + landing page
-    python tools/build_web.py tetris life        # build only these games
-    python tools/build_web.py sand --serve       # local test server for one game
-    python tools/build_web.py --assemble-only    # only write the app folders
+    python tools/build_web.py                       # build every game + stage site
+    python tools/build_web.py tetris                # build only some games + stage them
+    python tools/build_web.py --serve gameoflife    # local test server for one game
+    python tools/build_web.py --assemble-only
 '''
 
+import html
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
-from html import escape
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / 'src'
 BUILD_DIR = ROOT / 'build' / 'web'
 SITE_DIR = ROOT / 'build' / 'site'
-SHARED = (SRC / 'shared' / 'pixelfont.py', SRC / 'shared' / 'touch.py',
-          SRC / 'shared' / 'browser.py')
+SHARED = tuple(SRC / 'shared' / name for name in ('pixelfont.py', 'touch.py', 'browser.py'))
 
 
 @dataclass(frozen=True)
 class Game:
-    slug: str
+    path: str  # site sub-folder and pygbag app name
+    module: str  # entry module exposing `async def main()`
     title: str
-    module: str
+    description: str
     sources: tuple[Path, ...]
-    blurb: str
 
 
-GAMES = (
-    Game('tetris', 'Tetris', 'tetris',
-         (SRC / 'tetris' / 'tetris.py', SRC / 'tetris' / 'tetris_logic.py',
-          SRC / 'tetris' / 'highscores.py', *SHARED),
-         'Tap rotates, drag moves, flick down drops.'),
-    Game('life', 'Game of Life', 'game_of_life',
-         (SRC / 'game_of_life' / 'game_of_life.py', SRC / 'game_of_life' / 'life.py',
-          SRC / 'game_of_life' / 'patterns.py', *SHARED),
-         'Pick a pattern, tap cells, watch it evolve.'),
-    Game('sand', 'Sand Simulator', 'sand_simulator',
-         (SRC / 'sand_simulator' / 'sand_simulator.py', SRC / 'sand_simulator' / 'world.py',
-          SRC / 'sand_simulator' / 'materials.py', *SHARED),
-         'Paint sand, water and stone with a finger.'),
+GAMES: tuple[Game, ...] = (
+    Game('gameoflife', 'game_of_life', 'Game of Life',
+         'Pick a classic pattern and watch it evolve.',
+         tuple(SRC / 'game_of_life' / f for f in ('game_of_life.py', 'life.py', 'patterns.py'))
+         + SHARED),
+    Game('tetris', 'tetris', 'Tetris',
+         '8-bit falling blocks with levels and a high score table.',
+         tuple(SRC / 'tetris' / f for f in ('tetris.py', 'tetris_logic.py', 'highscores.py'))
+         + SHARED),
+    Game('sandsimulator', 'sand_simulator', 'Sand Simulator',
+         'Pour sand and water, draw stone walls.',
+         tuple(SRC / 'sand_simulator' / f for f in ('sand_simulator.py', 'world.py',
+                                                    'materials.py'))
+         + SHARED),
 )
-GAMES_BY_SLUG = {game.slug: game for game in GAMES}
+GAMES_BY_PATH = {game.path: game for game in GAMES}
 
-
-def main_script(module: str) -> str:
-    # pygbag sets up packages based on the imports it finds in main.py, so
-    # pygame must be imported here, before any module that uses it.
-    return f'''import asyncio
+# pygbag sets up packages based on the imports it finds in main.py, so pygame
+# must be imported here, before any module that uses it.
+MAIN_TEMPLATE = '''import asyncio
 
 import pygame  # noqa: F401  (pygbag needs to see this import in main.py)
 
@@ -66,99 +68,114 @@ import {module}
 asyncio.run({module}.main())
 '''
 
-
-def app_dir(game: Game, build_dir: Path = BUILD_DIR) -> Path:
-    return build_dir / game.slug
-
-
-def assemble(game: Game, target: Path) -> list[Path]:
-    '''Recreate `target` with the game sources and a pygbag `main.py`.'''
-    if target.exists():
-        shutil.rmtree(target)
-    target.mkdir(parents=True)
-    copied = [Path(shutil.copy2(source, target / source.name)) for source in game.sources]
-    main = target / 'main.py'
-    main.write_text(main_script(game.module))
-    return [*copied, main]
-
-
-def pygbag_command(game: Game, target: Path, serve: bool = False) -> list[str]:
-    mode = [] if serve else ['--build']
-    return [sys.executable, '-m', 'pygbag', *mode, '--ume_block', '0',
-            '--title', game.title, str(target)]
-
-
-def landing_page(games: tuple[Game, ...]) -> str:
-    links = '\n'.join(
-        f'    <a href="{game.slug}/"><b>{escape(game.title)}</b>'
-        f'<span>{escape(game.blurb)}</span></a>'
-        for game in games
-    )
-    return f'''<!doctype html>
+LANDING_TEMPLATE = '''<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>pygame sandbox</title>
-  <style>
-    body {{ margin: 0; min-height: 100vh; background: #0a0a0e; color: #e6e6e6;
-           font-family: ui-monospace, monospace; display: flex; flex-direction: column;
-           align-items: center; justify-content: center; gap: 16px; padding: 16px;
-           box-sizing: border-box; }}
-    h1 {{ color: #78c8ff; font-size: 28px; margin: 0 0 8px; }}
-    a {{ display: flex; flex-direction: column; gap: 6px; width: min(420px, 100%);
-         box-sizing: border-box; padding: 18px 20px; border: 2px solid #3a3a50;
-         border-radius: 8px; background: #18182a; color: inherit; text-decoration: none; }}
-    a:active, a:hover {{ border-color: #f8b800; }}
-    b {{ font-size: 20px; }}
-    span, p {{ color: #8c8ca0; font-size: 14px; }}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pygame sandbox</title>
+<style>
+  body {{ margin: 0; min-height: 100vh; background: #000; color: #fcfcfc;
+         font: 16px/1.5 ui-monospace, "DejaVu Sans Mono", Menlo, monospace;
+         display: flex; flex-direction: column; align-items: center; padding: 48px 16px; }}
+  h1 {{ color: #f8b800; letter-spacing: 4px; text-transform: uppercase;
+        text-shadow: 4px 4px 0 #5a3c00; margin: 0 0 8px; }}
+  p.lead {{ color: #9696aa; margin: 0 0 32px; text-transform: uppercase; }}
+  ul {{ list-style: none; padding: 0; margin: 0; width: 100%; max-width: 520px; }}
+  li a {{ display: block; margin: 0 0 16px; padding: 16px 20px; color: inherit;
+          text-decoration: none; border: 2px solid #fcfcfc; outline: 2px solid #0058f8;
+          outline-offset: -6px; text-transform: uppercase; }}
+  li a:hover, li a:focus {{ background: #28285a; }}
+  li strong {{ display: block; font-size: 20px; letter-spacing: 2px; }}
+  li span {{ color: #9696aa; font-size: 14px; }}
+  footer {{ margin-top: 24px; color: #6a6a80; font-size: 13px; }}
+  footer a {{ color: inherit; }}
+</style>
 </head>
 <body>
-  <h1>pygame sandbox</h1>
-{links}
-  <p>The first start downloads the Python runtime and takes a few seconds.</p>
+<h1>pygame sandbox</h1>
+<p class="lead">Pick a game. The first load takes a few seconds.</p>
+<ul>
+{items}
+</ul>
+<footer>Made with pygame and pygbag.
+  <a href="https://github.com/torresnelson/pygame">Source on GitHub</a></footer>
 </body>
 </html>
 '''
 
 
-def build_site(games: tuple[Game, ...], build_dir: Path = BUILD_DIR,
-               site_dir: Path = SITE_DIR) -> Path:
-    '''Copy each built game into `site_dir/<slug>` and write the landing page.'''
+def main_py(game: Game) -> str:
+    return MAIN_TEMPLATE.format(module=game.module)
+
+
+def landing_page(games: tuple[Game, ...] = GAMES) -> str:
+    items = '\n'.join(
+        f'<li><a href="{game.path}/"><strong>{html.escape(game.title)}</strong>'
+        f'<span>{html.escape(game.description)}</span></a></li>'
+        for game in games
+    )
+    return LANDING_TEMPLATE.format(items=items)
+
+
+def assemble(game: Game, app_dir: Path) -> list[Path]:
+    '''Recreate `app_dir` with the game sources and a pygbag `main.py`.'''
+    if app_dir.exists():
+        shutil.rmtree(app_dir)
+    app_dir.mkdir(parents=True)
+    copied = [Path(shutil.copy2(source, app_dir / source.name)) for source in game.sources]
+    main = app_dir / 'main.py'
+    main.write_text(main_py(game))
+    return [*copied, main]
+
+
+def pygbag_command(game: Game, app_dir: Path, serve: bool = False) -> list[str]:
+    mode = [] if serve else ['--build']
+    args = ['--ume_block', '0', '--title', game.title]
+    return [sys.executable, '-m', 'pygbag', *mode, *args, str(app_dir)]
+
+
+def stage_site(games: tuple[Game, ...], build_dir: Path = BUILD_DIR,
+               site_dir: Path = SITE_DIR) -> list[Path]:
+    '''Copy each game's pygbag output to `site_dir/<path>/` and write the landing page.'''
     if site_dir.exists():
         shutil.rmtree(site_dir)
     site_dir.mkdir(parents=True)
+    staged = []
     for game in games:
-        shutil.copytree(app_dir(game, build_dir) / 'build' / 'web', site_dir / game.slug)
+        target = site_dir / game.path
+        shutil.copytree(build_dir / game.path / 'build' / 'web', target)
+        staged.append(target)
     (site_dir / 'index.html').write_text(landing_page(games))
-    return site_dir
+    return staged
+
+
+def select(names: list[str]) -> tuple[Game, ...]:
+    unknown = [name for name in names if name not in GAMES_BY_PATH]
+    if unknown:
+        raise SystemExit(f'unknown game(s) {unknown}; choose from {list(GAMES_BY_PATH)}')
+    return tuple(GAMES_BY_PATH[name] for name in names) or GAMES
 
 
 def main(argv: list[str]) -> int:
     flags = {arg for arg in argv if arg.startswith('--')}
-    slugs = [arg for arg in argv if not arg.startswith('--')]
-    unknown = [slug for slug in slugs if slug not in GAMES_BY_SLUG]
-    if unknown:
-        print(f'unknown game(s): {", ".join(unknown)}; choose from {", ".join(GAMES_BY_SLUG)}')
-        return 2
-    games = tuple(GAMES_BY_SLUG[slug] for slug in slugs) or GAMES
-    if '--serve' in flags and len(games) != 1:
-        print('--serve needs exactly one game, e.g. python tools/build_web.py tetris --serve')
-        return 2
-
+    games = select([arg for arg in argv if not arg.startswith('--')])
     for game in games:
-        target = app_dir(game)
-        files = assemble(game, target)
-        print(f'assembled {len(files)} files in {target.relative_to(ROOT)}')
-        if '--assemble-only' in flags:
-            continue
-        command = pygbag_command(game, target, serve='--serve' in flags)
-        code = subprocess.run(command, check=False).returncode
-        if code:
+        files = assemble(game, BUILD_DIR / game.path)
+        print(f'{game.path}: assembled {len(files)} files')
+    if '--assemble-only' in flags:
+        return 0
+    if '--serve' in flags:
+        if len(games) != 1:
+            raise SystemExit('--serve needs exactly one game')
+        game = games[0]
+        return subprocess.run(pygbag_command(game, BUILD_DIR / game.path, serve=True)).returncode
+    for game in games:
+        code = subprocess.run(pygbag_command(game, BUILD_DIR / game.path)).returncode
+        if code != 0:
             return code
-    if not flags:
-        print(f'site ready in {build_site(games).relative_to(ROOT)}')
+    staged = stage_site(games)
+    print('site staged in build/site: ' + ', '.join(path.name for path in staged))
     return 0
 
 
