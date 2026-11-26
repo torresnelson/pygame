@@ -22,13 +22,14 @@ BASE_FALL_S = 0.5
 MIN_FALL_S = 0.05
 FALL_STEP = 0.85
 
-RED: Color = (255, 0, 0)
-GREEN: Color = (0, 255, 0)
-YELLOW: Color = (255, 255, 0)
-ORANGE: Color = (255, 165, 0)
-BLUE: Color = (0, 0, 255)
-LIGHT_BLUE: Color = (0, 255, 255)
-PURPLE: Color = (128, 0, 128)
+# Limited NES-style palette for an 8-bit look.
+RED: Color = (228, 52, 32)
+GREEN: Color = (60, 188, 56)
+YELLOW: Color = (248, 216, 32)
+ORANGE: Color = (252, 140, 32)
+BLUE: Color = (40, 84, 228)
+LIGHT_BLUE: Color = (60, 196, 252)
+PURPLE: Color = (172, 60, 200)
 
 # Each shape is a list of 5x5 rotation frames; '0' marks a block.
 S: Shape = [['.....',
@@ -210,15 +211,16 @@ def check_lost(locked: dict[Pos, Color]) -> bool:
     return any(y < 1 for _, y in locked)
 
 
+def full_rows(locked: dict[Pos, Color]) -> set[int]:
+    return {y for y in range(ROWS) if all((x, y) in locked for x in range(COLUMNS))}
+
+
 def clear_rows(locked: dict[Pos, Color]) -> tuple[dict[Pos, Color], int]:
     '''Remove full rows and drop every block by the number of cleared rows below it.
 
     Works for non-contiguous clears (e.g. rows 17 and 19 full, 18 not).
     '''
-    full = {
-        y for y in range(ROWS)
-        if all((x, y) in locked for x in range(COLUMNS))
-    }
+    full = full_rows(locked)
     remaining = {
         (x, y + sum(1 for row in full if row > y)): color
         for (x, y), color in locked.items()

@@ -17,6 +17,7 @@ from tetris_logic import (
     clear_rows,
     create_grid,
     fall_interval,
+    full_rows,
     hard_drop,
     level_for_lines,
     lock_piece,
@@ -64,6 +65,11 @@ def test_clear_non_contiguous_rows_keeps_every_block() -> None:
     remaining, lines = clear_rows(locked)
     assert lines == 2
     assert remaining == {(0, 19): R, (0, 18): R}
+
+
+def test_full_rows() -> None:
+    assert full_rows({**full_row(19), **full_row(17), (0, 18): R}) == {17, 19}
+    assert full_rows({(0, 19): R}) == set()
 
 
 def test_clear_rows_without_full_rows_is_noop() -> None:
