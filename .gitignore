@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 src/tetris/scores.txt
 src/tetris/highscores.json
+build/

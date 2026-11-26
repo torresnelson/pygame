@@ -8,16 +8,22 @@ dependencies = ['pygame>=2.5']
 
 [project.optional-dependencies]
 dev = ['pytest>=8', 'ruff>=0.5']
+web = ['pygbag==0.9.3']
 
 [tool.pytest.ini_options]
 testpaths = ['tests']
-pythonpath = ['src/tetris', 'src/game_of_life', 'src/sand_simulator']
+pythonpath = ['tools', 'src/shared', 'src/tetris', 'src/game_of_life', 'src/sand_simulator']
 
 [tool.ruff]
 line-length = 100
 
 [tool.ruff.lint]
 select = ['E', 'F', 'I', 'Q', 'UP', 'B']
+
+[tool.ruff.lint.per-file-ignores]
+# Entry scripts add src/shared to sys.path before importing shared modules.
+'src/tetris/tetris.py' = ['E402']
+'src/game_of_life/game_of_life.py' = ['E402']
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = 'single'

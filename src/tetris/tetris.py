@@ -10,6 +10,10 @@ down soft drops, space hard drops, p pauses, esc ends the game.
 import random
 import sys
 from dataclasses import dataclass
+from pathlib import Path
+
+# Shared modules (pixel font) live in src/shared.
+sys.path.append(str(Path(__file__).resolve().parents[1] / 'shared'))
 
 import pixelfont
 import pygame
