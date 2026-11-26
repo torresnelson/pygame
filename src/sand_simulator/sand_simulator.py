@@ -1,16 +1,26 @@
-'''Falling-sand sandbox.
+'''Falling-sand sandbox; runs on desktop and in the browser.
 
 Left mouse paints the selected material, right mouse erases.
 1 sand, 2 water, 3 stone, mouse wheel or [ ] brush size,
 space pause, c clear, esc back to the menu.
+
+The loops are async and yield once per frame so the same code runs in the
+browser through pygbag (see tools/build_web.py).
 '''
 
+import asyncio
 import sys
-from functools import cache
+from pathlib import Path
 
+# Shared modules (pixel font) live in src/shared; the web build copies them alongside.
+sys.path.append(str(Path(__file__).resolve().parents[1] / 'shared'))
+
+import pixelfont
 import pygame
-from materials import Material, palette
+from materials import PROPS, Material, palette
 from world import World
+
+WEB = sys.platform == 'emscripten'
 
 S_WIDTH = 800
 S_HEIGHT = 600
@@ -29,9 +39,12 @@ KEY_MATERIALS = {
 }
 
 BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-RED = (255, 0, 0)
+WHITE = (252, 252, 252)
+RED = (228, 52, 32)
+DIM = (150, 150, 170)
 BACKGROUND = (12, 12, 18)
+SAND = PROPS[Material.SAND].color
+HELP = '1 SAND  2 WATER  3 STONE  LMB PAINT  RMB ERASE  WHEEL/[] BRUSH  SPC PAUSE  C CLEAR'
 
 # Pre-rendered RGB bytes per (material, shade); empty cells use BACKGROUND.
 PIXELS: list[list[bytes]] = [
@@ -40,14 +53,13 @@ PIXELS: list[list[bytes]] = [
 ]
 
 
-@cache
-def get_font(size: int) -> pygame.font.Font:
-    return pygame.font.SysFont('monospace', size, bold=True)
+def status_text(material: Material, brush: int, fps: float, paused: bool) -> str:
+    paused_flag = '  PAUSED' if paused else ''
+    return f'{material.name}  BRUSH {brush}  {fps:.0f} FPS{paused_flag}'
 
 
-def draw_text(surface: pygame.Surface, text: str, size: int, color: tuple, y: float) -> None:
-    label = get_font(size).render(text, True, color)
-    surface.blit(label, (S_WIDTH / 2 - label.get_width() / 2, y - label.get_height() / 2))
+def blink(period_ms: int = 500) -> bool:
+    return pygame.time.get_ticks() // period_ms % 2 == 0
 
 
 def to_cell(pixel: tuple[int, int]) -> tuple[int, int]:
@@ -61,16 +73,20 @@ def render(world: World) -> bytes:
 def draw(win: pygame.Surface, world: World, status: str) -> None:
     frame = pygame.image.frombuffer(render(world), (world.width, world.height), 'RGB')
     win.blit(pygame.transform.scale(frame, (S_WIDTH, S_HEIGHT)), (0, 0))
-    win.blit(get_font(14).render(status, True, WHITE), (8, 6))
+    pixelfont.draw(win, status, (8, 8), WHITE, 2, shadow=BLACK)
+    pixelfont.draw(win, HELP, (8, 28), DIM, shadow=BLACK)
     pygame.display.update()
 
 
 def quit_game() -> None:
+    '''Quit on desktop; in the browser there is nothing to quit to.'''
+    if WEB:
+        return
     pygame.quit()
     sys.exit()
 
 
-def main(win: pygame.Surface) -> None:
+async def sandbox(win: pygame.Surface) -> None:
     clock = pygame.time.Clock()
     world = World(COLUMNS, ROWS)
     selected = Material.SAND
@@ -113,29 +129,44 @@ def main(win: pygame.Surface) -> None:
         if not paused:
             world.step()
 
-        status = (
-            f'{selected.name.lower()}  brush {brush}  {clock.get_fps():.0f} fps'
-            f'{"  [paused]" if paused else ""}  |  1 sand 2 water 3 stone, rmb erase'
-        )
-        draw(win, world, status)
+        draw(win, world, status_text(selected, brush, clock.get_fps(), paused))
         clock.tick(FPS)
+        await asyncio.sleep(0)
 
 
-def main_menu(win: pygame.Surface) -> None:
+def draw_menu(win: pygame.Surface) -> None:
+    win.fill(BLACK)
+    pixelfont.draw(win, 'SAND', (S_WIDTH // 2, 180), SAND, 10, shadow=(90, 70, 30), center=True)
+    pixelfont.draw(win, 'SIMULATOR', (S_WIDTH // 2, 270), SAND, 6, shadow=(90, 70, 30),
+                   center=True)
+    if blink():
+        pixelfont.draw(win, 'PRESS ANY KEY', (S_WIDTH // 2, 380), WHITE, 3, center=True)
+    pixelfont.draw(win, 'TITOREBOOT INC', (S_WIDTH // 2, 3 * S_HEIGHT // 4 + 40), RED, 2,
+                   center=True)
+    pygame.display.update()
+
+
+async def main_menu(win: pygame.Surface) -> None:
+    clock = pygame.time.Clock()
     while True:
-        win.fill(BLACK)
-        draw_text(win, 'Press any key to continue.', 30, WHITE, S_HEIGHT / 2)
-        draw_text(win, 'titoreboot inc', 15, RED, 3 * S_HEIGHT / 4)
-        pygame.display.update()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 quit_game()
-            if event.type == pygame.KEYDOWN:
-                main(win)
+            if event.type == pygame.KEYDOWN or (
+                event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
+            ):
+                await sandbox(win)
+        draw_menu(win)
+        clock.tick(FPS)
+        await asyncio.sleep(0)
 
 
-if __name__ == '__main__':
+async def main() -> None:
     pygame.init()
     window = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
     pygame.display.set_caption('sand_simulator')
-    main_menu(window)
+    await main_menu(window)
+
+
+if __name__ == '__main__':
+    asyncio.run(main())

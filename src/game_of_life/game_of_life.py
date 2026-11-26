@@ -5,7 +5,7 @@ Board: space run/pause, n step once, click toggles cells while paused,
 +/- speed, r reload pattern, c clear, esc back to the pattern picker.
 
 The loops are async and yield once per frame so the same code runs in the
-browser through pygbag (see tools/build_life_web.py).
+browser through pygbag (see tools/build_web.py).
 '''
 
 import asyncio

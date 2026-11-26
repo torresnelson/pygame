@@ -1,6 +1,6 @@
-name: Game of Life on GitHub Pages
+name: Games on GitHub Pages
 
-# Lint, test, build the browser version with pygbag and publish it to Pages.
+# Lint, test, build the browser versions with pygbag and publish them to Pages.
 # Requires Settings > Pages > Source: "GitHub Actions" (one-time setup).
 
 on:
@@ -39,12 +39,13 @@ jobs:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
 
-      - name: Build web version
-        run: python tools/build_life_web.py
+      - name: Build web versions
+        run: python tools/build_web.py
 
+      # Site layout: /gameoflife/, /tetris/, /sandsimulator/ and a landing page at /.
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: build/life_web/build/web
+          path: build/site
 
   deploy:
     needs: build

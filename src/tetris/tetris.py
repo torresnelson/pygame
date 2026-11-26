@@ -5,8 +5,13 @@ scaled up 2x without smoothing and overlaid with faint scanlines.
 
 Menu: up/down + enter or the mouse. In game: left/right move, up rotates,
 down soft drops, space hard drops, p pauses, esc ends the game.
+
+The loops are async and yield once per frame so the same code runs in the
+browser through pygbag (see tools/build_web.py); there, high scores are kept
+in the browser's localStorage instead of a file.
 '''
 
+import asyncio
 import random
 import sys
 from dataclasses import dataclass
@@ -22,11 +27,13 @@ from highscores import (
     NAME_LENGTH,
     Entry,
     best,
+    from_json,
     insert,
     load,
     new_entry,
     qualifies,
     save,
+    to_json,
 )
 from tetris_logic import (
     COLUMNS,
@@ -75,7 +82,11 @@ RANK_COLORS = (GOLD, SILVER, BRONZE)
 WHITE_MASK: Color = (255, 255, 255)
 SCANLINE_MASK: Color = (190, 190, 190)
 
-MENU_OPTIONS = ('PLAY', 'HIGH SCORES', 'QUIT')
+WEB = sys.platform == 'emscripten'
+STORAGE_KEY = 'tetris.highscores'
+
+# A browser tab has nothing to quit to, so QUIT is desktop only.
+MENU_OPTIONS = ('PLAY', 'HIGH SCORES') if WEB else ('PLAY', 'HIGH SCORES', 'QUIT')
 MENU_BOX = pygame.Rect(105, 150, 190, 92)
 MENU_ROW = 26
 
@@ -123,8 +134,36 @@ def cycle_color(period_ms: int = 120) -> Color:
 
 
 def quit_game() -> None:
+    '''Quit on desktop; in the browser there is nothing to quit to.'''
+    if WEB:
+        return
     pygame.quit()
     sys.exit()
+
+
+def load_scores() -> list[Entry]:
+    '''High scores from localStorage in the browser, from the JSON file on desktop.'''
+    if not WEB:
+        return load()
+    try:
+        import platform  # pygbag's platform module exposes the browser window
+
+        raw = platform.window.localStorage.getItem(STORAGE_KEY)
+        return from_json(str(raw) if raw else None)
+    except Exception:
+        return []
+
+
+def save_scores(entries: list[Entry]) -> None:
+    if not WEB:
+        save(entries)
+        return
+    try:
+        import platform
+
+        platform.window.localStorage.setItem(STORAGE_KEY, to_json(entries))
+    except Exception:
+        pass  # storage can be disabled (private mode); scores then last the session
 
 
 # -- drawing primitives ------------------------------------------------------
@@ -220,7 +259,7 @@ def draw_menu(canvas: pygame.Surface, selected: int, entries: list[Entry],
     pixelfont.draw(canvas, 'UP/DOWN + ENTER OR MOUSE', (WIDTH // 2, 330), DIM, center=True)
 
 
-def main_menu(screen: Screen, entries: list[Entry]) -> str:
+async def main_menu(screen: Screen, entries: list[Entry]) -> str:
     '''Show the menu until an option is chosen; return its name.'''
     clock = pygame.time.Clock()
     rng = random.Random()
@@ -237,7 +276,7 @@ def main_menu(screen: Screen, entries: list[Entry]) -> str:
                     selected = (selected + 1) % len(MENU_OPTIONS)
                 elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
                     return MENU_OPTIONS[selected]
-                elif event.key == pygame.K_ESCAPE:
+                elif event.key == pygame.K_ESCAPE and 'QUIT' in MENU_OPTIONS:
                     return 'QUIT'
             if event.type == pygame.MOUSEMOTION:
                 index = menu_index_at(to_canvas(event.pos))
@@ -254,6 +293,7 @@ def main_menu(screen: Screen, entries: list[Entry]) -> str:
         draw_menu(screen.canvas, selected, entries, drops)
         present(screen)
         clock.tick(FPS)
+        await asyncio.sleep(0)
 
 
 # -- high scores -------------------------------------------------------------
@@ -283,7 +323,8 @@ def draw_highscores(canvas: pygame.Surface, entries: list[Entry], highlight: int
         pixelfont.draw(canvas, 'PRESS ANY KEY', (WIDTH // 2, 332), WHITE, center=True)
 
 
-def show_highscores(screen: Screen, entries: list[Entry], highlight: int | None = None) -> None:
+async def show_highscores(screen: Screen, entries: list[Entry],
+                          highlight: int | None = None) -> None:
     clock = pygame.time.Clock()
     while True:
         for event in pygame.event.get():
@@ -296,6 +337,7 @@ def show_highscores(screen: Screen, entries: list[Entry], highlight: int | None 
         draw_highscores(screen.canvas, entries, highlight)
         present(screen)
         clock.tick(FPS)
+        await asyncio.sleep(0)
 
 
 def accept_char(name: str, char: str) -> str:
@@ -323,7 +365,7 @@ def draw_name_entry(canvas: pygame.Surface, result: GameResult, name: str) -> No
     pixelfont.draw(canvas, 'ENTER TO SAVE', (WIDTH // 2, 275), DIM, center=True)
 
 
-def enter_name(screen: Screen, result: GameResult, default: str) -> str:
+async def enter_name(screen: Screen, result: GameResult, default: str) -> str:
     '''Let the player type a name for the high score table.'''
     clock = pygame.time.Clock()
     name = default.upper()
@@ -344,6 +386,7 @@ def enter_name(screen: Screen, result: GameResult, default: str) -> str:
         draw_name_entry(screen.canvas, result, name)
         present(screen)
         clock.tick(FPS)
+        await asyncio.sleep(0)
 
 
 # -- game --------------------------------------------------------------------
@@ -417,16 +460,16 @@ def draw_overlay(canvas: pygame.Surface, title: str, subtitle: str) -> None:
     pixelfont.draw(canvas, subtitle, (box.centerx, box.y + 42), DIM, center=True)
 
 
-def flash_rows(screen: Screen, grid: Grid, rows: set[int], *stats: object) -> None:
+async def flash_rows(screen: Screen, grid: Grid, rows: set[int], *stats: object) -> None:
     '''Blink completed rows a few times before they are cleared.'''
     for i in range(6):
         draw_game(screen.canvas, grid, *stats, flash=rows if i % 2 == 0 else None)
         present(screen)
         pygame.event.pump()
-        pygame.time.delay(55)
+        await asyncio.sleep(0.055)
 
 
-def play(screen: Screen, top: int) -> GameResult:
+async def play(screen: Screen, top: int) -> GameResult:
     locked: dict = {}
     current_piece = new_piece()
     next_piece = new_piece()
@@ -475,8 +518,8 @@ def play(screen: Screen, top: int) -> GameResult:
             locked = lock_piece(current_piece, locked)
             completed = full_rows(locked)
             if completed:
-                flash_rows(screen, create_grid(locked), completed,
-                           next_piece, score, lines, level, top)
+                await flash_rows(screen, create_grid(locked), completed,
+                                 next_piece, score, lines, level, top)
             locked, cleared = clear_rows(locked)
             score += score_for_lines(cleared, level)
             lines += cleared
@@ -496,35 +539,38 @@ def play(screen: Screen, top: int) -> GameResult:
         if ended or check_lost(locked):
             draw_overlay(screen.canvas, 'GAME OVER', f'{score} POINTS')
             present(screen)
-            pygame.time.delay(1500)
+            await asyncio.sleep(1.5)
             pygame.event.clear()
             return GameResult(score, lines, level)
 
-
-def main(screen: Screen) -> None:
-    entries = load()
-    last_name = DEFAULT_NAME
-    while True:
-        choice = main_menu(screen, entries)
-        if choice == 'QUIT':
-            quit_game()
-        if choice == 'HIGH SCORES':
-            show_highscores(screen, entries)
-            continue
-
-        result = play(screen, best(entries))
-        if not qualifies(entries, result.score):
-            show_highscores(screen, entries)
-            continue
-        last_name = enter_name(screen, result, last_name)
-        entry = new_entry(last_name, result.score, result.lines, result.level)
-        entries, rank = insert(entries, entry)
-        save(entries)
-        show_highscores(screen, entries, rank)
+        await asyncio.sleep(0)
 
 
-if __name__ == '__main__':
+async def main() -> None:
     pygame.init()
     window = pygame.display.set_mode(WINDOW_SIZE)
     pygame.display.set_caption('Tetris')
-    main(make_screen(window))
+    screen = make_screen(window)
+    entries = load_scores()
+    last_name = DEFAULT_NAME
+    while True:
+        choice = await main_menu(screen, entries)
+        if choice == 'QUIT':
+            quit_game()
+        if choice == 'HIGH SCORES':
+            await show_highscores(screen, entries)
+            continue
+
+        result = await play(screen, best(entries))
+        if not qualifies(entries, result.score):
+            await show_highscores(screen, entries)
+            continue
+        last_name = await enter_name(screen, result, last_name)
+        entry = new_entry(last_name, result.score, result.lines, result.level)
+        entries, rank = insert(entries, entry)
+        save_scores(entries)
+        await show_highscores(screen, entries, rank)
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
