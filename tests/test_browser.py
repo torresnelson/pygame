@@ -1,5 +1,5 @@
 import pytest
-from browser import WEB, fit_box, is_portrait, load_text
+from browser import WEB, fit_box, is_portrait, keep_fitted, load_text
 
 
 @pytest.mark.parametrize(
@@ -20,3 +20,7 @@ def test_desktop_fallbacks() -> None:
     assert not WEB
     assert is_portrait() is False
     assert load_text('anything') is None
+
+
+def test_keep_fitted_is_a_no_op_on_desktop() -> None:
+    keep_fitted(800, 600, 10_000)

@@ -19,6 +19,29 @@ VIEWPORT_JS = (
     "document.querySelectorAll('meta[name=viewport]')"
     f".forEach(meta => meta.setAttribute('content', '{VIEWPORT}'))"
 )
+# Some browsers (Firefox for Android) still zoom on a double tap or a pinch;
+# cancel those gestures page-wide. The game's own listeners on the canvas run
+# first, so taps still reach it.
+NO_ZOOM_JS = '''(() => {
+  if (window.__noZoom) return;
+  window.__noZoom = true;
+  const options = {passive: false};
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', event => {
+    const now = Date.now();
+    if (now - lastTouchEnd < 400) event.preventDefault();
+    lastTouchEnd = now;
+  }, options);
+  document.addEventListener('touchmove', event => {
+    if (event.touches.length > 1) event.preventDefault();
+  }, options);
+  document.addEventListener('dblclick', event => event.preventDefault(), options);
+  for (const name of ['gesturestart', 'gesturechange']) {
+    document.addEventListener(name, event => event.preventDefault(), options);
+  }
+})()'''
+FIT_EVERY_MS = 250
+_last_fit_ms = -FIT_EVERY_MS
 
 
 def prepare_page(background: str = '#000') -> None:
@@ -39,6 +62,7 @@ def prepare_page(background: str = '#000') -> None:
         document.body.style.backgroundColor = background
         window.canvas.style.position = 'fixed'
         window.eval(VIEWPORT_JS)
+        window.eval(NO_ZOOM_JS)
     except Exception as error:  # the game still works, just with a scrollier page
         print(f'prepare_page: {error}')
 
@@ -81,6 +105,20 @@ def fit_canvas(width: int, height: int) -> None:
         style.margin = '0'
     except Exception as error:
         print(f'fit_canvas: {error}')
+
+
+def keep_fitted(width: int, height: int, now_ms: int) -> None:
+    '''Call every frame: re-fit the canvas a few times a second.
+
+    Some phones (Firefox for Android) lay the page out wider than the screen
+    until `prepare_page` fixes the viewport, and pygbag has sized the canvas
+    for that wider page by then; re-fitting corrects it within a moment.
+    '''
+    global _last_fit_ms
+    if not WEB or now_ms - _last_fit_ms < FIT_EVERY_MS:
+        return
+    _last_fit_ms = now_ms
+    fit_canvas(width, height)
 
 
 def load_text(key: str) -> str | None:
