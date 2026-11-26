@@ -66,6 +66,20 @@ Game rules live in pygame-free modules (`tetris_logic.py`,
 `life.py` + `patterns.py`, and the sand engine `world.py` + `materials.py`)
 covered by the tests in `tests/`.
 
+## Game of life in the browser
+
+The game of life also runs in the browser through
+[pygbag](https://pypi.org/project/pygbag/) (pygame compiled to
+WebAssembly), using the same code as the desktop version.
+
+    pip install -e '.[web]'
+    python tools/build_life_web.py           # static site in build/life_web/build/web
+    python tools/build_life_web.py --serve   # local test server on http://localhost:8000
+
+Every push to `master` builds it and publishes it to GitHub Pages
+(`.github/workflows/life-web.yml`). The first visit downloads the
+Python runtime, so it takes a few seconds to start.
+
 ## Development
 
     ruff check .
