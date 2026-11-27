@@ -118,6 +118,23 @@ class World:
         self.material[:] = [_EMPTY] * size
         self.velocity[:] = [0.0] * size
 
+    def resized(self, width: int, height: int) -> 'World':
+        '''A `width` x `height` copy, aligned to the bottom-left corner.
+
+        Bottom-aligned so piles stay on the floor; whatever does not fit is
+        dropped. Particles start at rest.
+        '''
+        world = World(width, height, self.rng)
+        world.tick = self.tick
+        for row in range(min(height, self.height)):
+            src = (self.height - 1 - row) * self.width
+            dst = (height - 1 - row) * width
+            for x in range(min(width, self.width)):
+                world.material[dst + x] = self.material[src + x]
+                world.shade[dst + x] = self.shade[src + x]
+                world.flow[dst + x] = self.flow[src + x]
+        return world
+
     # -- simulation --------------------------------------------------------
 
     def step(self) -> int:

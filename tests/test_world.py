@@ -225,3 +225,29 @@ def test_clear() -> None:
     world.paint(5, 5, 3, WATER)
     world.clear()
     assert list(world.particles()) == []
+
+
+def test_resized_keeps_particles_on_the_floor_and_drops_what_does_not_fit() -> None:
+    world = World(6, 4, random.Random(1))
+    world.set(0, 3, Material.SAND)  # bottom-left
+    world.set(5, 3, Material.WATER)  # bottom-right: outside a 4-wide copy
+    world.set(1, 0, Material.STONE)  # top row: outside a 2-tall copy
+
+    narrow = world.resized(4, 6)
+    assert narrow.get(0, 5) == Material.SAND
+    assert narrow.get(1, 2) == Material.STONE
+    assert narrow.count(Material.WATER) == 0
+
+    short = world.resized(6, 2)
+    assert short.get(0, 1) == Material.SAND
+    assert short.get(5, 1) == Material.WATER
+    assert short.count(Material.STONE) == 0
+    assert short.width == 6 and short.height == 2
+
+
+def test_resized_copy_is_independent() -> None:
+    world = World(3, 3)
+    world.set(1, 2, Material.SAND)
+    copy = world.resized(3, 3)
+    world.clear()
+    assert copy.get(1, 2) == Material.SAND

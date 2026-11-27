@@ -74,6 +74,9 @@ Controls:
   erases, `1` sand, `2` water, `3` stone, `4` eraser, mouse wheel
   or `[` `]` brush size, `space` pause, `c` clear, `esc` back to
   the menu; the toolbar under the world does the same with a tap.
+  On a phone held upright it uses a portrait layout (a tall world
+  and two rows of big toolbar buttons); turning the phone switches
+  layouts and keeps the sand (`--portrait` shows it on desktop).
   Sand accelerates under
   gravity, piles into slopes and sinks through water; water flows
   and levels out; stone stays put.
@@ -87,8 +90,8 @@ covered by the tests in `tests/`.
 All three games also run in the browser through
 [pygbag](https://pypi.org/project/pygbag/) (pygame compiled to
 WebAssembly), using the same code as the desktop versions, with
-touch controls for phones (tetris fits a phone either way up; the
-sand simulator is wide, so it fills more of a phone held sideways):
+touch controls for phones; every game fits a phone either way up
+and follows it when it is turned:
 
 - https://torresnelson.github.io/pygame/ (landing page)
 - https://torresnelson.github.io/pygame/gameoflife/
