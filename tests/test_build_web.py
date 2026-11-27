@@ -123,3 +123,9 @@ def test_pygbag_command() -> None:
     assert build[-1] == '/x/tetris'
     assert 'Tetris' in build
     assert '--build' not in pygbag_command(game, Path('/x/tetris'), serve=True)
+
+
+def test_landing_boxes_fit_the_longest_title_and_centre_it() -> None:
+    page = landing_page()
+    assert 'width: max-content' in page
+    assert 'text-align: center' in page
