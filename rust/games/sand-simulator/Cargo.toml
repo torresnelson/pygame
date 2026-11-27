@@ -8,7 +8,11 @@ publish.workspace = true
 
 [dependencies]
 bevy.workspace = true
+fastrand.workspace = true
+pixelfont.workspace = true
+sand.workspace = true
 sandbox-ui.workspace = true
+touch.workspace = true
 
 [lints]
 workspace = true

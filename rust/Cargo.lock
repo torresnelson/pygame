@@ -4709,7 +4709,11 @@ name = "sand-simulator"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "fastrand",
+ "pixelfont",
+ "sand",
  "sandbox-ui",
+ "touch",
 ]
 
 [[package]]
