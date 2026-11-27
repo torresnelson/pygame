@@ -6,4 +6,3 @@ __pycache__/
 src/tetris/scores.txt
 src/tetris/highscores.json
 build/
-rust/target/

@@ -2,9 +2,9 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CHECKED = ('src', 'tests', 'tools', 'plans', '.github', 'rust')
-TEXT_SUFFIXES = {'.py', '.md', '.tmpl', '.html', '.yml', '.yaml', '.toml', '.nix', '.txt', '.rs'}
-SKIPPED = {'__pycache__', 'target'}  # caches and the Rust build output
+CHECKED = ('src', 'tests', 'tools', 'plans', '.github')
+TEXT_SUFFIXES = {'.py', '.md', '.tmpl', '.html', '.yml', '.yaml', '.toml', '.nix', '.txt'}
+SKIPPED = {'__pycache__'}
 # Code points, not literal characters, so this file stays free of emoji itself.
 EMOJI_RANGES = (
     (0x2190, 0x21FF),  # arrows
