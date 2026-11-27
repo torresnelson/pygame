@@ -119,6 +119,23 @@ To test a full build locally, use `--serve`, or open the static site
 via `127.0.0.1` rather than `localhost`: on `localhost` pygbag fetches
 pygame from its own dev server.
 
+## Rust port (work in progress)
+
+`rust/` holds a Rust/bevy port of the three games, built alongside the
+Python version (see `plans/claude/rust-rewrite.md`). So far each game only
+opens its window. Bevy needs some native libraries, which
+`rust/shell.nix` provides on NixOS:
+
+    cd rust
+    nix-shell
+    cargo run -p tetris            # or game-of-life, sand-simulator
+    cargo test --workspace
+    cargo build --workspace --target wasm32-unknown-unknown
+
+The first build compiles bevy and takes several minutes.
+`.github/workflows/rust.yml` checks formatting, clippy, tests and the
+browser build on every change under `rust/`.
+
 ## Development
 
     ruff check .
