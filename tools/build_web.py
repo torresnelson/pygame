@@ -77,10 +77,11 @@ LANDING_TEMPLATE = '''<!doctype html>
          font: 16px/1.5 ui-monospace, "DejaVu Sans Mono", Menlo, monospace;
          display: flex; flex-direction: column; align-items: center; justify-content: center;
          padding: 48px 16px; box-sizing: border-box; }}
-  ul {{ list-style: none; padding: 0; margin: 0; width: 100%; max-width: 520px; }}
-  li a {{ display: block; margin: 0 0 16px; padding: 16px 20px; color: inherit;
+  /* As wide as the longest title, so every box matches it. */
+  ul {{ list-style: none; padding: 0; margin: 0; width: max-content; max-width: 100%; }}
+  li a {{ display: block; margin: 0 0 16px; padding: 16px 32px; color: inherit;
           text-decoration: none; border: 2px solid #fcfcfc; outline: 2px solid #0058f8;
-          outline-offset: -6px; text-transform: uppercase; }}
+          outline-offset: -6px; text-transform: uppercase; text-align: center; }}
   li a:hover, li a:focus {{ background: #28285a; }}
   li strong {{ display: block; font-size: 20px; letter-spacing: 2px; }}
 </style>
