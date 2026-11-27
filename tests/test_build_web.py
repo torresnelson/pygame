@@ -95,8 +95,18 @@ def test_stage_site_layout_and_landing_page(tmp_path: Path) -> None:
 def test_landing_page_escapes_text() -> None:
     from build_web import Game
 
-    page = landing_page((Game('x', 'x', 'A <b>', 'B & C', ()),))
-    assert 'A &lt;b&gt;' in page and 'B &amp; C' in page
+    page = landing_page((Game('x', 'x', 'A <b> & C', ()),))
+    assert 'A &lt;b&gt; &amp; C' in page
+
+
+def test_landing_page_is_just_the_game_boxes() -> None:
+    page = landing_page()
+    body = page[page.index('<body>'):]
+    assert body.count('<li>') == len(GAMES)
+    for game in GAMES:
+        assert f'<li><a href="{game.path}/"><strong>{game.title}</strong></a></li>' in body
+    for gone in ('<h1>', 'Pick a game', '<footer>', 'Made with pygame', '<span>'):
+        assert gone not in page, gone
 
 
 def test_select() -> None:

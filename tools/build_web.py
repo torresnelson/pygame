@@ -38,21 +38,17 @@ class Game:
     path: str  # site sub-folder and pygbag app name
     module: str  # entry module exposing `async def main()`
     title: str
-    description: str
     sources: tuple[Path, ...]
 
 
 GAMES: tuple[Game, ...] = (
     Game('gameoflife', 'game_of_life', 'Game of Life',
-         'Pick a classic pattern and watch it evolve.',
          tuple(SRC / 'game_of_life' / f for f in ('game_of_life.py', 'life.py', 'patterns.py'))
          + SHARED),
     Game('tetris', 'tetris', 'Tetris',
-         '8-bit falling blocks with levels and a high score table.',
          tuple(SRC / 'tetris' / f for f in ('tetris.py', 'tetris_logic.py', 'highscores.py'))
          + SHARED),
     Game('sandsimulator', 'sand_simulator', 'Sand Simulator',
-         'Pour sand and water, draw stone walls.',
          tuple(SRC / 'sand_simulator' / f for f in ('sand_simulator.py', 'world.py',
                                                     'materials.py'))
          + SHARED),
@@ -79,29 +75,20 @@ LANDING_TEMPLATE = '''<!doctype html>
 <style>
   body {{ margin: 0; min-height: 100vh; background: #000; color: #fcfcfc;
          font: 16px/1.5 ui-monospace, "DejaVu Sans Mono", Menlo, monospace;
-         display: flex; flex-direction: column; align-items: center; padding: 48px 16px; }}
-  h1 {{ color: #f8b800; letter-spacing: 4px; text-transform: uppercase;
-        text-shadow: 4px 4px 0 #5a3c00; margin: 0 0 8px; }}
-  p.lead {{ color: #9696aa; margin: 0 0 32px; text-transform: uppercase; }}
+         display: flex; flex-direction: column; align-items: center; justify-content: center;
+         padding: 48px 16px; box-sizing: border-box; }}
   ul {{ list-style: none; padding: 0; margin: 0; width: 100%; max-width: 520px; }}
   li a {{ display: block; margin: 0 0 16px; padding: 16px 20px; color: inherit;
           text-decoration: none; border: 2px solid #fcfcfc; outline: 2px solid #0058f8;
           outline-offset: -6px; text-transform: uppercase; }}
   li a:hover, li a:focus {{ background: #28285a; }}
   li strong {{ display: block; font-size: 20px; letter-spacing: 2px; }}
-  li span {{ color: #9696aa; font-size: 14px; }}
-  footer {{ margin-top: 24px; color: #6a6a80; font-size: 13px; }}
-  footer a {{ color: inherit; }}
 </style>
 </head>
 <body>
-<h1>pygame sandbox</h1>
-<p class="lead">Pick a game. The first load takes a few seconds.</p>
 <ul>
 {items}
 </ul>
-<footer>Made with pygame and pygbag.
-  <a href="https://github.com/torresnelson/pygame">Source on GitHub</a></footer>
 </body>
 </html>
 '''
@@ -113,8 +100,7 @@ def main_py(game: Game) -> str:
 
 def landing_page(games: tuple[Game, ...] = GAMES) -> str:
     items = '\n'.join(
-        f'<li><a href="{game.path}/"><strong>{html.escape(game.title)}</strong>'
-        f'<span>{html.escape(game.description)}</span></a></li>'
+        f'<li><a href="{game.path}/"><strong>{html.escape(game.title)}</strong></a></li>'
         for game in games
     )
     return LANDING_TEMPLATE.format(items=items)
