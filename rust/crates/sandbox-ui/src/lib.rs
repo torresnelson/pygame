@@ -7,6 +7,7 @@
 //! removes the web page's loading screen on the first frame.
 
 pub mod canvas;
+pub mod clock;
 pub mod display;
 pub mod orientation;
 pub mod pointer;
