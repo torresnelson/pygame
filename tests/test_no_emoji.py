@@ -2,8 +2,9 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CHECKED = ('src', 'tests', 'tools', 'plans', '.github')
-TEXT_SUFFIXES = {'.py', '.md', '.tmpl', '.html', '.yml', '.yaml', '.toml', '.nix', '.txt'}
+CHECKED = ('src', 'tests', 'tools', 'plans', '.github', 'rust')
+TEXT_SUFFIXES = {'.py', '.md', '.tmpl', '.html', '.yml', '.yaml', '.toml', '.nix', '.txt', '.rs'}
+SKIPPED = {'__pycache__', 'target'}  # caches and the Rust build output
 # Code points, not literal characters, so this file stays free of emoji itself.
 EMOJI_RANGES = (
     (0x2190, 0x21FF),  # arrows
@@ -23,7 +24,7 @@ def checked_files() -> list[Path]:
     for folder in CHECKED:
         files += [path for path in (ROOT / folder).rglob('*')
                   if path.is_file() and path.suffix in TEXT_SUFFIXES
-                  and '__pycache__' not in path.parts]
+                  and not SKIPPED & set(path.relative_to(ROOT).parts)]
     return files
 
 
