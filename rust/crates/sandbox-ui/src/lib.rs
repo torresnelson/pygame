@@ -1,7 +1,23 @@
-//! Shared bevy setup for the sandbox games.
+//! Shared bevy layer for the sandbox games.
 //!
-//! Phase 1 only builds the window; later phases add the pixel camera, text,
-//! buttons, layouts, pointers and storage (see `plans/claude/rust-rewrite.md`).
+//! Games draw each frame on a CPU [`Canvas`] (like the pygame versions), which
+//! [`SandboxPlugin`] shows scaled with hard pixel edges and letterboxed to the
+//! window. It also provides [`Pointers`] (mouse and multi-touch in canvas
+//! pixels), the window [`Orientation`], small text saves ([`storage`]) and
+//! removes the web page's loading screen on the first frame.
+
+pub mod canvas;
+pub mod display;
+pub mod orientation;
+pub mod pointer;
+pub mod storage;
+pub mod web;
+
+pub use canvas::{BLACK, Canvas, Rgb};
+pub use display::PixelCanvas;
+pub use orientation::Orientation;
+pub use pixelfont::Rect;
+pub use pointer::{Pointer, PointerId, Pointers};
 
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
@@ -33,6 +49,31 @@ pub fn game_app(title: &str, width: u32, height: u32) -> App {
     }))
     .insert_resource(ClearColor(Color::BLACK));
     app
+}
+
+/// Canvas display, pointers, orientation and the loading-screen hook.
+pub struct SandboxPlugin {
+    pub canvas_size: (i32, i32),
+    pub scanlines: bool,
+}
+
+impl Plugin for SandboxPlugin {
+    fn build(&self, app: &mut App) {
+        let (width, height) = self.canvas_size;
+        app.insert_resource(PixelCanvas {
+            canvas: Canvas::new(width, height),
+            scanlines: self.scanlines,
+        })
+        .add_plugins((display::plugin, pointer::plugin, orientation::plugin))
+        .add_systems(Last, hide_loading_once);
+    }
+}
+
+fn hide_loading_once(mut done: Local<bool>) {
+    if !*done {
+        web::hide_loading();
+        *done = true;
+    }
 }
 
 #[cfg(test)]

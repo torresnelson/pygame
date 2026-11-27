@@ -61,22 +61,26 @@ do not depend on bevy, so the pytest suites port one-to-one as
 - **Screens as `States`**: tetris `Menu | Playing | Paused | GameOver |
   HighScores | NameEntry`; life `Picker | Board`; sand `Title | Sandbox`.
   Each screen spawns its entities on enter and despawns them on exit.
-- **Pixel look**: render each game at its virtual resolution (tetris
-  400x350 / 400x760, life 649x741 / 649x1009, sand per layout) into an
-  `Image` render target with nearest sampling, shown by a second camera
-  scaled to fit and letterboxed; scanlines as a full-screen overlay
-  sprite. Pointer positions map back through the same transform.
-- **Pixel text**: build a glyph atlas texture from the `pixelfont` table at
-  startup; text = sprites per glyph (exact match with Python).
-- **Sand rendering**: one `Image` the size of the grid, its bytes
-  rewritten each frame from `World` (as `render()` does today).
+- **Pixel look** (changed in phase 3): games draw each frame on a CPU
+  `Canvas` at their virtual resolution (tetris 400x350 / 400x760, life
+  649x741 / 649x1009, sand per layout) with plain rectangle fills, as the
+  pygame versions do. `sandbox-ui` uploads it to one texture with nearest
+  sampling, shown by a single camera, scaled to fit and letterboxed;
+  scanlines are a translucent overlay sprite. This replaces the planned
+  render target + sprites: drawing is pixel-identical to pygame and
+  testable without a GPU, for one small texture upload per frame.
+- **Pixel text**: `Canvas::text` fills the `pixelfont` rectangles (no glyph
+  atlas needed).
+- **Sand rendering**: write the grid's colours straight into the `Canvas`.
 - **Layouts / orientation**: a `Layout` resource per game; a system checks
   `Window` size each frame and swaps layouts (sand calls
   `World::resized`). No CSS fitting: `fit_canvas_to_parent` +
   `prevent_default_event_handling` on the window.
 - **Input**: a `Pointers` resource merging mouse and `Touches`, each
   pointer with its own id, press time and drag state, so buttons and
-  gestures work per finger (multi-touch).
+  gestures work per finger (multi-touch). In the browser, positions are
+  mapped through the canvas element's CSS size, not bevy's window size,
+  which can be off by the device pixel ratio.
 - **Storage**: key `tetris.highscores`, same JSON, so browser scores carry
   over from the Python build if served on the same origin path; desktop
   `highscores.json` + legacy `scores.txt` import.
@@ -94,8 +98,8 @@ One PR per phase, CI green for both Python and Rust.
    `sand` with tests from `test_pixelfont`, `test_touch`, `test_life`,
    `test_patterns`, `test_tetris_logic`, `test_highscores`, `test_world`,
    `test_browser` (`fit_box`). Exit: all pass; sand `step` benchmark.
-3. **`sandbox-ui` plugin** - pixel camera + scanlines, glyph atlas text,
-   NES box / buttons, layouts + orientation, `Pointers`, storage,
+3. **`sandbox-ui` plugin** - CPU canvas + display + scanlines, pixel text,
+   orientation, `Pointers`, storage,
    `hide_loading()` call on first frame. Exit: a demo screen renders the
    same on desktop and in phone emulation.
 4. **Games at parity** - life, then sand, then tetris; port the layout
