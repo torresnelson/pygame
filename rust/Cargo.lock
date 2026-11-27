@@ -2752,7 +2752,11 @@ name = "game-of-life"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "fastrand",
+ "life",
+ "pixelfont",
  "sandbox-ui",
+ "touch",
 ]
 
 [[package]]

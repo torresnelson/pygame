@@ -41,6 +41,9 @@ pub struct Pointers {
     pub down: Vec<Pointer>,
     pub pressed: Vec<Pointer>,
     pub released: Vec<Pointer>,
+    /// Where the mouse cursor is, pressed or not (`None` before it moves);
+    /// for hover effects. Touches never hover.
+    pub hover: Option<(i32, i32)>,
     /// Milliseconds since the app started.
     pub now_ms: u64,
 }
@@ -121,6 +124,7 @@ fn update_pointers(
         *last_cursor = Some(moved.position);
     }
     let cursor = last_cursor.map(to_canvas);
+    pointers.hover = cursor;
     for (button, id) in [
         (MouseButton::Left, PointerId::MouseLeft),
         (MouseButton::Right, PointerId::MouseRight),
