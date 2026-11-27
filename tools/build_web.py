@@ -28,6 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / 'src'
 BUILD_DIR = ROOT / 'build' / 'web'
 SITE_DIR = ROOT / 'build' / 'site'
+# pygbag's default page plus a loading screen and a phone-friendly viewport.
+TEMPLATE = ROOT / 'tools' / 'web_template.tmpl'
 SHARED = tuple(SRC / 'shared' / name for name in ('pixelfont.py', 'touch.py', 'browser.py'))
 
 
@@ -131,7 +133,7 @@ def assemble(game: Game, app_dir: Path) -> list[Path]:
 
 def pygbag_command(game: Game, app_dir: Path, serve: bool = False) -> list[str]:
     mode = [] if serve else ['--build']
-    args = ['--ume_block', '0', '--title', game.title]
+    args = ['--ume_block', '0', '--title', game.title, '--template', str(TEMPLATE)]
     return [sys.executable, '-m', 'pygbag', *mode, *args, str(app_dir)]
 
 

@@ -105,7 +105,12 @@ Build locally:
 
 Every push to `master` builds the site and publishes it to GitHub
 Pages (`.github/workflows/pages.yml`). The first visit downloads the
-Python runtime, so a game takes a few seconds to start.
+Python runtime, so a game takes a few seconds to start; meanwhile
+each game shows a loading screen with its title and a progress bar.
+That screen lives in `tools/web_template.tmpl`, pygbag's default
+page template with the loading screen added (and a single
+phone-friendly viewport tag); the build passes it to pygbag with
+`--template`, and each game removes the screen on its first frame.
 
 To test a full build locally, use `--serve`, or open the static site
 via `127.0.0.1` rather than `localhost`: on `localhost` pygbag fetches

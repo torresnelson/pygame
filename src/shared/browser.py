@@ -45,7 +45,8 @@ _last_fit_ms = -FIT_EVERY_MS
 
 
 def prepare_page(background: str = '#000') -> None:
-    '''Keep touch gestures on the game: no scrolling, zooming or pull-to-refresh.'''
+    '''Keep touch gestures on the game (no scrolling, zooming or pull-to-refresh)
+    and drop the loading screen now that the game is running.'''
     if not WEB:
         return
     try:
@@ -63,6 +64,7 @@ def prepare_page(background: str = '#000') -> None:
         window.canvas.style.position = 'fixed'
         window.eval(VIEWPORT_JS)
         window.eval(NO_ZOOM_JS)
+        window.eval('window.hide_loading && window.hide_loading()')  # see tools/web_template.tmpl
     except Exception as error:  # the game still works, just with a scrollier page
         print(f'prepare_page: {error}')
 
