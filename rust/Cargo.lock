@@ -4713,6 +4713,11 @@ name = "sandbox-ui"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "js-sys",
+ "pixelfont",
+ "touch",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
