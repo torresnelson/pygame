@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Page for one Rust/bevy game; tools/build_rust_web.py fills in {{TITLE}}
+     and {{NAME}} (the wasm-bindgen output name). -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>{{TITLE}}</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
+               overscroll-behavior: none; touch-action: none;
+               user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  canvas#bevy { display: block; width: 100%; height: 100%; touch-action: none;
+                image-rendering: pixelated; outline: none; }
+
+  #loading { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+             align-items: center; justify-content: center; gap: 22px; padding: 24px;
+             box-sizing: border-box; background: #000; color: #fcfcfc;
+             font: 14px/1.5 ui-monospace, "DejaVu Sans Mono", Menlo, monospace;
+             text-transform: uppercase; text-align: center; letter-spacing: 2px;
+             transition: opacity 0.3s; }
+  #loading.done { opacity: 0; pointer-events: none; }
+  #loading h1 { margin: 0; color: #f8b800; font-size: clamp(26px, 8vw, 44px);
+                letter-spacing: 4px; text-shadow: 4px 4px 0 #5a3c00; }
+  #loading .blocks { display: flex; gap: 6px; height: 64px; align-items: flex-end; }
+  #loading .blocks i { width: 18px; height: 18px;
+                       box-shadow: inset 3px 3px 0 rgba(255, 255, 255, 0.45),
+                                   inset -3px -3px 0 rgba(0, 0, 0, 0.35);
+                       animation: drop 1.2s cubic-bezier(0.5, 0, 1, 1) infinite; }
+  #loading .blocks i:nth-child(1) { background: #00a800; }
+  #loading .blocks i:nth-child(2) { background: #e40058; animation-delay: 0.15s; }
+  #loading .blocks i:nth-child(3) { background: #3cbcfc; animation-delay: 0.3s; }
+  #loading .blocks i:nth-child(4) { background: #f8b800; animation-delay: 0.45s; }
+  @keyframes drop { 0% { transform: translateY(-46px); opacity: 0; } 25% { opacity: 1; }
+                    55%, 100% { transform: translateY(0); opacity: 1; } }
+  #loading .bar { width: min(320px, 80vw); height: 22px; padding: 3px; box-sizing: border-box;
+                  border: 2px solid #fcfcfc; outline: 2px solid #0058f8; outline-offset: -6px; }
+  #loading .fill { height: 100%; width: 0%; transition: width 0.2s steps(4);
+                   background: repeating-linear-gradient(90deg, #f8b800 0 10px, transparent 10px 12px); }
+  #loading .hint { color: #8c8ca0; font-size: 12px; max-width: 360px; }
+  @media (prefers-reduced-motion: reduce) { #loading .blocks i { animation: none; } }
+</style>
+</head>
+<body>
+<div id="loading" role="status" aria-live="polite">
+  <h1>{{TITLE}}</h1>
+  <div class="blocks" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div class="bar" aria-hidden="true"><div class="fill" id="loading-fill"></div></div>
+  <div id="loading-status">Loading</div>
+  <div class="hint" id="loading-hint">Rust version: the first visit downloads the game, so it takes a few seconds.</div>
+  <noscript><div class="hint">This game needs JavaScript.</div></noscript>
+</div>
+<canvas id="bevy" tabindex="0"></canvas>
+<script>
+  // Keep gestures on the game: no double-tap or pinch zoom (Firefox for Android).
+  (() => {
+    let lastTouchEnd = 0;
+    const options = { passive: false };
+    document.addEventListener('touchend', event => {
+      const now = Date.now();
+      if (now - lastTouchEnd < 400) event.preventDefault();
+      lastTouchEnd = now;
+    }, options);
+    document.addEventListener('touchmove', event => {
+      if (event.touches.length > 1) event.preventDefault();
+    }, options);
+    document.addEventListener('dblclick', event => event.preventDefault(), options);
+    for (const name of ['gesturestart', 'gesturechange']) {
+      document.addEventListener(name, event => event.preventDefault(), options);
+    }
+  })();
+
+  // Called by the game (sandbox-ui) on its first frame.
+  window.hide_loading = () => {
+    const screen = document.getElementById('loading');
+    if (!screen || screen.classList.contains('done')) return;
+    document.getElementById('loading-fill').style.width = '100%';
+    screen.classList.add('done');
+    setTimeout(() => screen.remove(), 350);
+  };
+</script>
+<script type="module">
+  import init from './{{NAME}}.js';
+
+  const fill = document.getElementById('loading-fill');
+  const label = document.getElementById('loading-status');
+
+  // Download the game with a real progress bar, then start it.
+  async function download(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`${url}: ${response.status}`);
+    // Servers that compress report the compressed size, so cap the bar at 90%.
+    const total = Number(response.headers.get('content-length')) || 0;
+    if (!response.body || !total) return new Uint8Array(await response.arrayBuffer());
+    const reader = response.body.getReader();
+    const chunks = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      fill.style.width = `${Math.min(90, 90 * received / total).toFixed(1)}%`;
+    }
+    const bytes = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return bytes;
+  }
+
+  label.textContent = 'Downloading';
+  try {
+    const bytes = await download('./{{NAME}}_bg.wasm');
+    fill.style.width = '95%';
+    label.textContent = 'Starting game';
+    await init({ module_or_path: bytes });
+  } catch (error) {
+    // bevy's event loop takes over by throwing this on purpose.
+    if (!String(error).includes('Using exceptions for control flow')) {
+      label.textContent = 'Could not start the game';
+      document.getElementById('loading-hint').textContent = String(error);
+      throw error;
+    }
+  }
+</script>
+</body>
+</html>

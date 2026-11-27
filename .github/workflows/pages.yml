@@ -42,7 +42,28 @@ jobs:
       - name: Build web versions
         run: python tools/build_web.py
 
-      # Site layout: /gameoflife/, /tetris/, /sandsimulator/ and a landing page at /.
+      # Rust/bevy port (rust/): staged under /rust/<game>/ after the Python site.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.99.1'
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Tools for the Rust browser builds
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binaryen
+          # Must match the wasm-bindgen version in rust/Cargo.lock.
+          cargo install wasm-bindgen-cli --version 0.2.130 --locked
+
+      - name: Build Rust web versions
+        run: python tools/build_rust_web.py
+
+      # Site layout: /gameoflife/, /tetris/, /sandsimulator/ and a landing page at /;
+      # the Rust versions at /rust/gameoflife/ and /rust/sandsimulator/.
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build/site
